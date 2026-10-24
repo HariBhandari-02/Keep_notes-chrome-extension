@@ -6,7 +6,12 @@ import {
   type PanelSize,
   type ThemeMode,
 } from '../types/note'
-import { isFiniteNumber, normalizeNote, sortNotes } from '../utils/noteUtils'
+import {
+  isSafeCoordinate,
+  isSafeDimension,
+  isValidNoteId,
+} from '../utils/noteLimits'
+import { normalizeNote, sortNotes } from '../utils/noteUtils'
 
 export const NOTE_KEY_PREFIX = 'keepnotes:note:'
 export const SETTINGS_KEY = 'keepnotes:settings'
@@ -49,25 +54,28 @@ async function drain(id: string): Promise<void> {
  * can never land after a newer edit to the same note.
  */
 export function queueNoteSave(note: Note): Promise<void> {
-  if (tombstones.has(note.id)) return Promise.resolve()
-  pending.set(note.id, note)
-  const existing = chains.get(note.id)
+  const normalized = normalizeNote(note)
+  if (!normalized) return Promise.reject(new Error('Invalid note data.'))
+  if (tombstones.has(normalized.id)) return Promise.resolve()
+  pending.set(normalized.id, normalized)
+  const existing = chains.get(normalized.id)
   if (existing) return existing
 
-  const chain = drain(note.id)
+  const id = normalized.id
+  const chain = drain(id)
     .catch((error: unknown) => {
-      pending.delete(note.id)
+      pending.delete(id)
       throw error
     })
     .finally(() => {
-      chains.delete(note.id)
-      if (pending.has(note.id)) {
-        const latest = pending.get(note.id)
+      chains.delete(id)
+      if (pending.has(id)) {
+        const latest = pending.get(id)
         if (latest) void queueNoteSave(latest).catch(() => undefined)
       }
     })
 
-  chains.set(note.id, chain)
+  chains.set(id, chain)
   return chain
 }
 
@@ -93,6 +101,7 @@ export async function flushAllNotes(): Promise<void> {
 }
 
 export async function deleteNote(id: string): Promise<void> {
+  if (!isValidNoteId(id)) return
   tombstones.add(id)
   pending.delete(id)
   const chain = chains.get(id)
@@ -112,20 +121,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export async function loadNote(id: string): Promise<Note | null> {
+  if (!isValidNoteId(id)) return null
   const key = noteKey(id)
-  const values = (await getStorage().get(key)) as Record<string, unknown>
+  const values = await getStorage().get(key)
   const raw = values[key]
   if (!isRecord(raw)) return null
   return normalizeNote({ ...raw, id })
 }
 
 export async function loadAllNotes(): Promise<Note[]> {
-  const all = (await getStorage().get(null)) as Record<string, unknown>
+  const all = await getStorage().get(null)
+  if (!isRecord(all)) return []
   const notes: Note[] = []
 
   for (const [key, value] of Object.entries(all)) {
     if (!isNoteKey(key) || !isRecord(value)) continue
-    const normalized = normalizeNote({ ...value, id: noteIdFromKey(key) })
+    const id = noteIdFromKey(key)
+    if (!isValidNoteId(id)) continue
+    const normalized = normalizeNote({ ...value, id })
     if (normalized) notes.push(normalized)
   }
 
@@ -133,31 +146,25 @@ export async function loadAllNotes(): Promise<Note[]> {
 }
 
 export function normalizeSettings(raw: unknown): KeepNotesSettings {
-  if (!raw || typeof raw !== 'object') return { ...DEFAULT_SETTINGS }
-  const record = raw as Record<string, unknown>
+  if (!isRecord(raw)) return { ...DEFAULT_SETTINGS }
 
   const theme: ThemeMode =
-    record.theme === 'light' || record.theme === 'dark' || record.theme === 'system'
-      ? record.theme
+    raw.theme === 'light' || raw.theme === 'dark' || raw.theme === 'system'
+      ? raw.theme
       : DEFAULT_SETTINGS.theme
 
   let panelPosition: PanelPosition | null = null
-  if (record.panelPosition && typeof record.panelPosition === 'object') {
-    const position = record.panelPosition as Record<string, unknown>
-    if (isFiniteNumber(position.x) && isFiniteNumber(position.y)) {
+  if (isRecord(raw.panelPosition)) {
+    const position = raw.panelPosition
+    if (isSafeCoordinate(position.x) && isSafeCoordinate(position.y)) {
       panelPosition = { x: position.x, y: position.y }
     }
   }
 
   let panelSize: PanelSize | null = null
-  if (record.panelSize && typeof record.panelSize === 'object') {
-    const size = record.panelSize as Record<string, unknown>
-    if (
-      isFiniteNumber(size.width) &&
-      isFiniteNumber(size.height) &&
-      size.width > 0 &&
-      size.height > 0
-    ) {
+  if (isRecord(raw.panelSize)) {
+    const size = raw.panelSize
+    if (isSafeDimension(size.width) && isSafeDimension(size.height)) {
       panelSize = { width: size.width, height: size.height }
     }
   }
@@ -166,13 +173,13 @@ export function normalizeSettings(raw: unknown): KeepNotesSettings {
     theme,
     panelPosition,
     panelSize,
-    panelMinimized: record.panelMinimized === true,
-    selectedNoteId: typeof record.selectedNoteId === 'string' && record.selectedNoteId ? record.selectedNoteId : null,
+    panelMinimized: raw.panelMinimized === true,
+    selectedNoteId: isValidNoteId(raw.selectedNoteId) ? raw.selectedNoteId : null,
   }
 }
 
 export async function loadSettings(): Promise<KeepNotesSettings> {
-  const values = (await getStorage().get(SETTINGS_KEY)) as Record<string, unknown>
+  const values = await getStorage().get(SETTINGS_KEY)
   return normalizeSettings(values[SETTINGS_KEY])
 }
 
@@ -189,6 +196,55 @@ export type StorageChangeListener = (
   settings: KeepNotesSettings | null
 ) => void
 
+interface CollectedStorageChanges {
+  changed: Note[]
+  removedIds: string[]
+  nextSettings: KeepNotesSettings | null
+}
+
+function collectNoteChange(
+  key: string,
+  change: chrome.storage.StorageChange,
+  changed: Note[],
+  removedIds: string[]
+): void {
+  const id = noteIdFromKey(key)
+  if (!isValidNoteId(id)) return
+
+  if (change.newValue === undefined) {
+    if (!tombstones.has(id)) removedIds.push(id)
+    return
+  }
+
+  if (!isRecord(change.newValue)) return
+  const normalized = normalizeNote({ ...change.newValue, id })
+  if (normalized) changed.push(normalized)
+}
+
+function collectStorageChanges(changes: unknown): CollectedStorageChanges {
+  const changed: Note[] = []
+  const removedIds: string[] = []
+  let nextSettings: KeepNotesSettings | null = null
+
+  if (!isRecord(changes)) {
+    return { changed, removedIds, nextSettings }
+  }
+
+  for (const [key, value] of Object.entries(changes)) {
+    if (!isRecord(value)) continue
+    const change = value as chrome.storage.StorageChange
+
+    if (key === SETTINGS_KEY) {
+      nextSettings = normalizeSettings(change.newValue)
+      continue
+    }
+    if (!isNoteKey(key)) continue
+    collectNoteChange(key, change, changed, removedIds)
+  }
+
+  return { changed, removedIds, nextSettings }
+}
+
 export function subscribeToStorage(listener: StorageChangeListener): () => void {
   if (typeof chrome === 'undefined' || !chrome.storage?.onChanged) {
     return () => undefined
@@ -201,28 +257,7 @@ export function subscribeToStorage(listener: StorageChangeListener): () => void 
   ) => {
     if (areaName !== 'local') return
 
-    const changed: Note[] = []
-    const removedIds: string[] = []
-    let nextSettings: KeepNotesSettings | null = null
-
-    for (const [key, change] of Object.entries(changes)) {
-      if (key === SETTINGS_KEY) {
-        nextSettings = normalizeSettings(change.newValue)
-        continue
-      }
-      if (!isNoteKey(key)) continue
-      const id = noteIdFromKey(key)
-
-      if (typeof change.newValue === 'undefined') {
-        if (!tombstones.has(id)) removedIds.push(id)
-        continue
-      }
-
-      if (!isRecord(change.newValue)) continue
-      const normalized = normalizeNote({ ...change.newValue, id })
-      if (normalized) changed.push(normalized)
-    }
-
+    const { changed, removedIds, nextSettings } = collectStorageChanges(changes)
     if (changed.length > 0 || removedIds.length > 0 || nextSettings) {
       listener({ changed, removedIds }, nextSettings)
     }

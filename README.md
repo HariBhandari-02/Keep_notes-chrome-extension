@@ -93,7 +93,9 @@ Useful scripts:
 | `npm run typecheck` | TypeScript check with `tsc --noEmit` |
 | `npm test` | Run the Vitest suite |
 | `npm run test:watch` | Run tests in watch mode |
-| `npm run verify` | Validate the built extension in `dist/` |
+| `npm run verify` | Validate the built extension, permissions, CSP, and bundle |
+| `npm run audit` | Audit production dependencies only |
+| `npm run security:check` | Typecheck, test, build, verify, and audit production deps |
 | `npm run clean` | Remove `dist/` |
 
 ## How permissions work
@@ -115,9 +117,23 @@ Everything is stored locally by Chrome:
 - `keepnotes:note:<id>` — one key per note (`id`, `title`, `customTitle`, `content`, `createdAt`, `updatedAt`). One note's save never overwrites another note's key.
 - `keepnotes:settings` — theme, last panel position and size, minimized state, and selected note.
 
-Notes survive the panel closing, page reloads, and Chrome restarts. They are local to the Chrome profile and are not synced to `chrome.storage.sync` or any server. Uninstalling the extension removes its storage.
+Notes survive the panel closing, page reloads, and Chrome restarts. They are local to the Chrome profile and are not synced to `chrome.storage.sync` or any server. Uninstalling the extension removes its storage. `chrome.storage.local` is not encrypted by Keep Notes; anyone with access to the Chrome profile can read its extension storage.
 
-Malformed or partially written values are validated and ignored. Per-note writes are serialized and coalesced so an older asynchronous write cannot overwrite a newer edit. Open tabs listen to `chrome.storage.onChanged` to merge changes from other tabs when it is safe to do so.
+Malformed or partially written values are validated and ignored. Note IDs must be short alphanumeric/dash/underscore identifiers, and reserved object keys are rejected so stored data cannot pollute object prototypes. Per-note writes are serialized and coalesced so an older asynchronous write cannot overwrite a newer edit. Open tabs listen to `chrome.storage.onChanged` to merge changes from other tabs when it is safe to do so.
+
+Limits are applied consistently on load, edit, and save:
+
+| Field | Limit |
+| --- | --- |
+| Note content | 100,000 characters |
+| Note title | 200 characters |
+| Note ID | 128 characters |
+| Page selection appended at once | 50,000 characters |
+| Search query | 200 characters |
+| Panel position coordinate | +/-1,000,000 px |
+| Panel width/height | 10,000 px |
+
+Oversized stored content and titles are truncated when loaded or saved rather than rendered or written in full. Oversized page selections are truncated to the remaining note capacity, and the editor reports when this happens.
 
 ## Using Keep Notes
 
@@ -140,11 +156,29 @@ Titles are automatic until you edit the title field. Typing a title makes it cus
 
 - All note data stays in `chrome.storage.local` on your machine.
 - No analytics, tracking, ads, accounts, cookies, browsing history, or remote calls.
-- Note content is rendered as plain text in a `<textarea>`; no user HTML is injected or executed.
-- The panel uses Shadow DOM for style isolation.
-- All executable code is bundled locally. There is no `eval`, remote script, or remotely hosted code.
-- Permissions are limited to `storage`, `activeTab`, and `scripting`.
-- Selected page text is read only in response to the **Add selected text** action.
+- Note content is rendered as escaped React text in the list and as a plain `<textarea>` in the editor. `dangerouslySetInnerHTML`, `eval`, `new Function`, inline scripts, and remote executable code are not used.
+- The panel is mounted in a **closed** Shadow DOM so page CSS cannot leak in and page scripts cannot normally traverse the panel's DOM. Shadow DOM is a defense-in-depth and style-isolation mechanism, not a formal security boundary; notes are rendered in the same renderer process as the page.
+- All executable code is bundled locally. The production manifest declares `script-src 'self'; object-src 'self'; base-uri 'none'; form-action 'none'`.
+- Permissions are limited to `storage`, `activeTab`, and `scripting`, with no host permissions, content-script declarations, `web_accessible_resources`, or `externally_connectable`.
+- Selected page text is read only in response to the **Add selected text** action, is treated as untrusted text, and is size-limited.
+- The content script accepts only three background messages (`PING`, `OPEN_PANEL`, `TOGGLE_PANEL`), rejects unknown message shapes and extra fields, and verifies `sender.id` matches this extension while rejecting content-script senders. No external message handler is registered.
+- The background worker only injects `content.js` into `http:`, `https:`, and `file:` URLs. It refuses browser-internal pages, extension pages, `javascript:`, `data:`, `blob:`, malformed URLs, and the Chrome Web Store.
+- Note content, titles, imported/stored records, page selections, and messages are all treated as untrusted input.
+
+### Storage access-level trade-off
+
+Chrome provides `chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' })` to block content scripts from reading extension storage. Keep Notes cannot use it in its current architecture: the injected content script owns the editor UI and therefore needs `chrome.storage.local`. Restricting access would break the panel on every page. The narrower alternatives would be to move all persistence behind a validated service-worker message protocol and keep the content script as a display-only client; that is a larger architectural change. Until then, the extension relies on Chrome's content-script isolated world, a closed Shadow DOM, minimal DOM attributes, and never accepting page-provided code or storage keys.
+
+### Dependency audit
+
+`npm audit --omit=dev` reports **0 production vulnerabilities**. A full `npm audit` currently reports moderate advisories in the Tailwind/PostCSS **development** toolchain (`postcss-selector-parser` CPU-exhaustion advisory). Those packages are used only to compile CSS during development/build and are not shipped in `dist/`. The available automated fix upgrades Tailwind to a new major version, so it is documented rather than applied blindly.
+
+### Security tooling
+
+- `npm run security:check` runs TypeScript checks, the full Vitest suite, the production build, bundle verification, and the production dependency audit.
+- `npm run audit` runs `npm audit --omit=dev`.
+- `npm test` includes static source scans for dangerous DOM/code-execution APIs and XSS/message-protocol regression tests.
+- SonarQube is optional and requires a local server plus `SONAR_TOKEN`; see `scripts/sonar.sh` and `sonar-project.properties`. No ESLint or Semgrep toolchain is installed by default to avoid unnecessary dependencies; the project's static checks are implemented as Vitest tests and the post-build verifier.
 
 ## Tests
 
@@ -156,15 +190,19 @@ The suite covers:
 
 - Automatic title generation (empty notes, first meaningful line, whitespace, truncation, Unicode).
 - Custom-title preservation and resuming automatic titles after a custom title is cleared.
-- Note validation and malformed-storage handling.
-- Per-note persistence, independence, deletion, and coalescing of rapid edits.
-- Search matching across titles and content.
+- Note validation, size limits, malformed timestamps, unsafe IDs/prototype keys, and malformed-storage handling.
+- Per-note persistence, independence, deletion, coalescing of rapid edits, transient write failure recovery, and storage quota errors.
+- Search matching across titles and content, including bounded queries and previews.
 - Panel sizing/clamping, resize constraints, edge anchoring, and drag-target detection.
-- Manifest V3 requirements, permissions, and icons.
+- Manifest V3 requirements, permissions, CSP, and icons.
+- Content-script message protocol: unknown types, malformed payloads, extra fields, unauthorized senders, content-script senders, and oversized selections.
+- XSS regression tests: `<script>`, `<img onerror>`, and `<svg onload>` in titles/content, both in components and when loaded from storage, must render as text and never execute.
+- Closed Shadow DOM mounting, duplicate-injection prevention, and hardened host styles against hostile page CSS.
+- Static source checks for `dangerouslySetInnerHTML`, `eval`, `new Function`, unsafe HTML insertion, `postMessage`, and external message handlers.
 - UI integration: creating, editing, custom titles, searching, reopening, and deleting notes; restoring notes after a remount.
 - Manual Chrome smoke testing with an unpacked extension covers injection, resizing from multiple handles, minimum constraints, viewport clamping, and size persistence across reloads.
 
-`npm run build && npm run verify` checks that the built extension has the expected manifest, service worker, content script, and icon files.
+`npm run build && npm run verify` checks that the production bundle has the expected manifest, minimal permissions, strict CSP, no dynamic code execution, no external message handler, and all required files. It inspects the built `dist/` output, not only the development configuration.
 
 ## Project structure
 
@@ -181,12 +219,13 @@ The suite covers:
 │   ├── background/service-worker.ts
 │   ├── content/content.tsx     # Shadow DOM injection + message bridge
 │   ├── content/panelBus.ts     # visibility/focus store for the injected panel
+│   ├── content/panelMessages.ts# message schema + sender validation
 │   ├── components/             # FloatingPanel, header, editor, list, status, theme
 │   ├── hooks/                  # useNotes, useDraggable, useTheme
 │   ├── services/notesStorage.ts
 │   ├── styles/globals.css
 │   ├── types/note.ts
-│   ├── utils/                  # title generation, note helpers, position, classnames
+│   ├── utils/                  # title generation, note helpers, position, limits
 │   ├── App.tsx
 │   └── vite-env.d.ts
 ├── tests/
@@ -198,7 +237,7 @@ The suite covers:
 └── tsconfig.json
 ```
 
-The content bundle imports the compiled Tailwind CSS as an inline string and installs it into the Shadow DOM via a constructed stylesheet (with a `<style>` fallback), so no page-level CSS can affect the panel.
+The content bundle imports the compiled Tailwind CSS as an inline string and installs it into a closed Shadow DOM via a constructed stylesheet (with a `<style>` fallback), so page-level CSS cannot affect the panel internals. The host element also applies its critical layout and stacking styles with `!important` so a hostile page stylesheet cannot hide or displace it.
 
 ## Limitations and troubleshooting
 
@@ -206,7 +245,7 @@ The content bundle imports the compiled Tailwind CSS as an inline string and ins
 - **Extension was reloaded:** After rebuilding or reloading the extension at `chrome://extensions`, refresh the webpage. The old content script can no longer talk to Chrome and the panel is replaced on the next injection.
 - **`file://` pages:** Chrome requires you to enable **Allow access to file URLs** for the extension in its details page. Without that, Keep Notes reports the page as unsupported.
 - **Theme button does nothing / wrong theme:** Use the footer button to cycle themes. The default **System** mode follows `prefers-color-scheme`.
-- **Large notes:** Notes are limited by Chrome's local storage quota (about 10 MB for the extension). If storage fills up, the footer shows **Unable to save** with a Retry action.
+- **Large notes:** Individual notes are limited to 100,000 characters and titles to 200 characters. Chrome's local storage quota (about 10 MB for the extension) may still fill first; the footer shows **Unable to save** with a Retry action, and unsaved edits stay in memory until a save succeeds.
 - **No cross-device sync:** Storage is intentionally local. There is no cloud backend or account.
 - **Keyboard command conflict:** Reassign the command at `chrome://extensions/shortcuts`.
 - **Panel off-screen after resizing:** The panel reclamps itself on window resize; drag it by the header if needed.

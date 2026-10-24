@@ -24,7 +24,7 @@ export function PanelHeader({
   onNewNote,
   onToggleMinimize,
   onClose,
-}: PanelHeaderProps) {
+}: Readonly<PanelHeaderProps>) {
   return (
     <header
       {...dragProps}

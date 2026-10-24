@@ -1,34 +1,48 @@
+import type { PanelMessage } from '../content/panelMessages'
+
 const CONTENT_SCRIPT = 'content.js'
 const DEFAULT_TITLE = 'Open Keep Notes'
 const UNSUPPORTED_TITLE = 'Keep Notes cannot run on this page. Try a regular website.'
 
-type PanelMessage =
-  | { type: 'PING' }
-  | { type: 'OPEN_PANEL' }
-  | { type: 'TOGGLE_PANEL' }
+type PanelResponse = { ok: boolean; visible?: boolean } | undefined
 
-type PanelResponse = { ok: true; visible?: boolean } | undefined
+const ALLOWED_PROTOCOLS = new Set(['http:', 'https:', 'file:'])
+const WEB_STORE_HOSTS = new Set(['chromewebstore.google.com'])
 
-const RESTRICTED_SCHEMES = /^(chrome|chrome-extension|chrome-untrusted|edge|brave|opera|vivaldi|about|devtools|view-source|moz-extension):/i
-const WEB_STORE_URLS = /^https:\/\/(chromewebstore\.google\.com|chrome\.google\.com\/webstore)\//i
+function isValidTabId(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+}
 
-function canInjectInto(url: string | undefined): boolean {
+function isWebStore(url: URL): boolean {
+  if (WEB_STORE_HOSTS.has(url.hostname)) return true
+  return url.hostname === 'chrome.google.com' && url.pathname.startsWith('/webstore')
+}
+
+export function canInjectInto(url: string | undefined): boolean {
   if (!url) return false
-  if (RESTRICTED_SCHEMES.test(url)) return false
-  if (WEB_STORE_URLS.test(url)) return false
-  return /^(https?|file):/i.test(url)
+
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return false
+  }
+
+  if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) return false
+  if (isWebStore(parsed)) return false
+  return true
 }
 
 async function sendMessage(tabId: number, message: PanelMessage): Promise<PanelResponse> {
   try {
-    return (await chrome.tabs.sendMessage(tabId, message)) as PanelResponse
+    return await chrome.tabs.sendMessage(tabId, message)
   } catch {
     return undefined
   }
 }
 
 async function setUnsupportedFeedback(tabId: number | undefined): Promise<void> {
-  if (typeof tabId !== 'number') return
+  if (!isValidTabId(tabId)) return
   try {
     await chrome.action.setBadgeBackgroundColor({ tabId, color: '#b91c1c' })
     await chrome.action.setBadgeText({ tabId, text: '!' })
@@ -66,7 +80,7 @@ async function ensureContentScript(tabId: number): Promise<boolean> {
 
 async function openPanel(tab: chrome.tabs.Tab | undefined): Promise<void> {
   const tabId = tab?.id
-  if (typeof tabId !== 'number' || !canInjectInto(tab?.url)) {
+  if (!isValidTabId(tabId) || !canInjectInto(tab?.url)) {
     await setUnsupportedFeedback(tabId)
     return
   }
@@ -83,7 +97,7 @@ async function openPanel(tab: chrome.tabs.Tab | undefined): Promise<void> {
 
 async function togglePanel(tab: chrome.tabs.Tab | undefined): Promise<void> {
   const tabId = tab?.id
-  if (typeof tabId !== 'number' || !canInjectInto(tab?.url)) {
+  if (!isValidTabId(tabId) || !canInjectInto(tab?.url)) {
     await setUnsupportedFeedback(tabId)
     return
   }

@@ -1,11 +1,24 @@
 import { createRoot } from 'react-dom/client'
 import App from '../App'
 import styles from '../styles/globals.css?inline'
+import { MAX_PAGE_SELECTION_LENGTH } from '../utils/noteLimits'
 import { panelBus } from './panelBus'
+import { isTrustedPanelSender, parsePanelMessage } from './panelMessages'
 
 const ROOT_ID = 'keep-notes-extension-root'
 const CONTENT_FLAG = '__keepNotesContentLoaded'
 const MAX_Z_INDEX = '2147483647'
+const HOST_STYLE = [
+  'all: initial !important',
+  'position: fixed !important',
+  'inset: 0 !important',
+  'display: block !important',
+  `z-index: ${MAX_Z_INDEX} !important`,
+  'pointer-events: none !important',
+  'visibility: visible !important',
+  'opacity: 1 !important',
+  'color-scheme: normal !important',
+].join('; ')
 
 declare global {
   interface Window {
@@ -14,7 +27,7 @@ declare global {
 }
 
 export function getPageSelectionText(): string {
-  const selection = window.getSelection()
+  const selection = globalThis.getSelection()
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return ''
 
   const range = selection.getRangeAt(0)
@@ -22,9 +35,45 @@ export function getPageSelectionText(): string {
   if (typeof ShadowRoot !== 'undefined' && root instanceof ShadowRoot) return ''
 
   const host = document.getElementById(ROOT_ID)
-  if (host && host.contains(range.commonAncestorContainer)) return ''
+  if (host?.contains(range.commonAncestorContainer)) return ''
 
-  return selection.toString()
+  const text = selection.toString()
+  return text.length > MAX_PAGE_SELECTION_LENGTH
+    ? text.slice(0, MAX_PAGE_SELECTION_LENGTH)
+    : text
+}
+
+function registerMessageHandler(): void {
+  if (typeof chrome === 'undefined' || !chrome.runtime?.onMessage) return
+
+  const runtimeId = chrome.runtime.id
+  chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+    const parsed = parsePanelMessage(message)
+    if (!parsed) {
+      sendResponse({ ok: false, error: 'invalid_message' })
+      return false
+    }
+    if (!isTrustedPanelSender(sender, runtimeId)) {
+      sendResponse({ ok: false, error: 'unauthorized' })
+      return false
+    }
+
+    if (parsed.type === 'PING') {
+      sendResponse({ ok: true, visible: panelBus.getSnapshot().visible })
+      return false
+    }
+    if (parsed.type === 'OPEN_PANEL') {
+      panelBus.open()
+      sendResponse({ ok: true })
+      return false
+    }
+    if (parsed.type === 'TOGGLE_PANEL') {
+      panelBus.toggle()
+      sendResponse({ ok: true })
+      return false
+    }
+    return false
+  })
 }
 
 function mount(): void {
@@ -35,17 +84,9 @@ function mount(): void {
 
   const host = document.createElement('div')
   host.id = ROOT_ID
-  host.style.cssText = [
-    'all: initial',
-    'position: fixed',
-    'inset: 0',
-    'display: block',
-    `z-index: ${MAX_Z_INDEX}`,
-    'pointer-events: none',
-    'color-scheme: normal',
-  ].join('; ')
+  host.style.cssText = HOST_STYLE
 
-  const shadow = host.attachShadow({ mode: 'open' })
+  const shadow = host.attachShadow({ mode: 'closed' })
   try {
     const sheet = new CSSStyleSheet()
     sheet.replaceSync(styles)
@@ -63,29 +104,7 @@ function mount(): void {
   document.documentElement.appendChild(host)
 
   createRoot(mountPoint).render(<App getPageSelection={getPageSelectionText} />)
-
-  if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
-    chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-      if (!message || typeof message !== 'object') return false
-      const type = (message as { type?: unknown }).type
-
-      if (type === 'PING') {
-        sendResponse({ ok: true, visible: panelBus.getSnapshot().visible })
-        return false
-      }
-      if (type === 'OPEN_PANEL') {
-        panelBus.open()
-        sendResponse({ ok: true })
-        return false
-      }
-      if (type === 'TOGGLE_PANEL') {
-        panelBus.toggle()
-        sendResponse({ ok: true })
-        return false
-      }
-      return false
-    })
-  }
+  registerMessageHandler()
 }
 
 if (document.documentElement) {

@@ -5,13 +5,13 @@ const QUERY = '(prefers-color-scheme: dark)'
 
 export function usePrefersDark(): boolean {
   const [prefersDark, setPrefersDark] = useState(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
-    return window.matchMedia(QUERY).matches
+    if (!globalThis.window?.matchMedia) return false
+    return globalThis.window.matchMedia(QUERY).matches
   })
 
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-    const media = window.matchMedia(QUERY)
+    if (!globalThis.window?.matchMedia) return
+    const media = globalThis.window.matchMedia(QUERY)
     const handleChange = (event: MediaQueryListEvent) => setPrefersDark(event.matches)
     setPrefersDark(media.matches)
     media.addEventListener('change', handleChange)

@@ -5,6 +5,9 @@
   "version": "1.0.0",
   "description": "A fast, local-first floating notepad. Capture notes while you read without leaving the page.",
   "permissions": ["storage", "activeTab", "scripting"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; base-uri 'none'; form-action 'none'"
+  },
   "background": {
     "service_worker": "background.js",
     "type": "module"

@@ -36,7 +36,7 @@ export function IconButton({
   type = 'button',
   title,
   ...rest
-}: IconButtonProps) {
+}: Readonly<IconButtonProps>) {
   return (
     <button
       type={type}

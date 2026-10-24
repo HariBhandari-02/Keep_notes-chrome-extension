@@ -19,7 +19,7 @@ interface ThemeToggleProps {
   onChange: (theme: ThemeMode) => void
 }
 
-export function ThemeToggle({ theme, onChange }: ThemeToggleProps) {
+export function ThemeToggle({ theme, onChange }: Readonly<ThemeToggleProps>) {
   const next = NEXT_THEME[theme]
   const label = `Theme: ${LABELS[theme]}. Switch to ${LABELS[next].toLowerCase()}.`
 

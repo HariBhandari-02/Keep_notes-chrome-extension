@@ -33,8 +33,8 @@ export function useDraggable({ panelRef, initialPosition, onDragEnd }: UseDragga
         next,
         rect?.width ?? PANEL_WIDTH,
         rect?.height ?? PANEL_HEIGHT,
-        window.innerWidth,
-        window.innerHeight
+        globalThis.innerWidth,
+        globalThis.innerHeight
       )
       positionRef.current = clamped
       setPosition(clamped)
@@ -112,7 +112,7 @@ export function useDraggable({ panelRef, initialPosition, onDragEnd }: UseDragga
   const onPointerMove = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
       const drag = dragRef.current
-      if (!drag || drag.pointerId !== event.pointerId) return
+      if (drag?.pointerId !== event.pointerId) return
 
       const next = clampPosition(
         {
@@ -121,8 +121,8 @@ export function useDraggable({ panelRef, initialPosition, onDragEnd }: UseDragga
         },
         drag.panelWidth,
         drag.panelHeight,
-        window.innerWidth,
-        window.innerHeight
+        globalThis.innerWidth,
+        globalThis.innerHeight
       )
 
       positionRef.current = next
@@ -134,7 +134,7 @@ export function useDraggable({ panelRef, initialPosition, onDragEnd }: UseDragga
   const onPointerUp = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
       const drag = dragRef.current
-      if (!drag || drag.pointerId !== event.pointerId) return
+      if (drag?.pointerId !== event.pointerId) return
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId)
       }
@@ -152,8 +152,8 @@ export function useDraggable({ panelRef, initialPosition, onDragEnd }: UseDragga
 
   useEffect(() => {
     const handleResize = () => reclamp()
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+    globalThis.addEventListener('resize', handleResize)
+    return () => globalThis.removeEventListener('resize', handleResize)
   }, [reclamp])
 
   useEffect(() => {

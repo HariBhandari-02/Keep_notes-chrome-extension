@@ -38,6 +38,11 @@ describe('truncateText', () => {
     expect(Array.from(result)).toHaveLength(10)
     expect(result).not.toContain('�')
   })
+
+  it('returns only an ellipsis for tiny limits', () => {
+    expect(truncateText('anything', 1)).toBe('…')
+    expect(truncateText('anything', 0)).toBe('…')
+  })
 })
 
 describe('deriveTitle', () => {

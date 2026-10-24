@@ -18,6 +18,11 @@ import {
   type ThemeMode,
 } from '../types/note'
 import {
+  isSafeCoordinate,
+  isSafeDimension,
+  isValidNoteId,
+} from '../utils/noteLimits'
+import {
   createBlankNote,
   sortNotes,
   updateNoteContent,
@@ -39,6 +44,98 @@ function describeStorageError(error: unknown): string {
     return 'Chrome storage is unavailable in this context.'
   }
   return 'Unable to save your note. Please try again.'
+}
+
+interface StoredNotesMerge {
+  notes: Record<string, Note>
+  changed: boolean
+  removedSelected: boolean
+}
+
+function hasOwn(record: Record<string, Note>, id: string): boolean {
+  return Object.hasOwn(record, id)
+}
+
+function copyNotes(source: Record<string, Note>): Record<string, Note> {
+  return Object.assign(Object.create(null) as Record<string, Note>, source)
+}
+
+function removeStaleNotes(
+  current: Record<string, Note>,
+  removedIds: string[],
+  dirtyIds: Set<string>,
+  selectedId: string | null
+): { notes: Record<string, Note>; removed: boolean; removedSelected: boolean } {
+  let nextNotes = current
+  let removed = false
+  let removedSelected = false
+
+  for (const id of removedIds) {
+    if (!hasOwn(nextNotes, id) || dirtyIds.has(id)) continue
+    if (nextNotes === current) nextNotes = copyNotes(current)
+    delete nextNotes[id]
+    removed = true
+    if (selectedId === id) removedSelected = true
+  }
+
+  return { notes: nextNotes, removed, removedSelected }
+}
+
+function applyIncomingNotes(
+  current: Record<string, Note>,
+  incomingNotes: Note[],
+  dirtyIds: Set<string>
+): { notes: Record<string, Note>; changed: boolean } {
+  let nextNotes = current
+  let changed = false
+
+  for (const incoming of incomingNotes) {
+    if (dirtyIds.has(incoming.id)) continue
+    const existing = hasOwn(nextNotes, incoming.id) ? nextNotes[incoming.id] : undefined
+    if (existing && incoming.updatedAt <= existing.updatedAt) continue
+    if (nextNotes === current) nextNotes = copyNotes(current)
+    nextNotes[incoming.id] = incoming
+    changed = true
+  }
+
+  return { notes: nextNotes, changed }
+}
+
+function mergeStoredNotes(
+  current: Record<string, Note>,
+  incomingNotes: Note[],
+  removedIds: string[],
+  dirtyIds: Set<string>,
+  selectedId: string | null
+): StoredNotesMerge {
+  const removals = removeStaleNotes(current, removedIds, dirtyIds, selectedId)
+  const additions = applyIncomingNotes(removals.notes, incomingNotes, dirtyIds)
+  return {
+    notes: additions.notes,
+    changed: removals.removed || additions.changed,
+    removedSelected: removals.removedSelected,
+  }
+}
+
+function pickSelectedId(
+  notes: Record<string, Note>,
+  storedSelected: string | null | undefined
+): string | null {
+  if (storedSelected && hasOwn(notes, storedSelected)) return storedSelected
+  return sortNotes(Object.values(notes))[0]?.id ?? null
+}
+
+function unwrapLoadResult<T>(
+  result: PromiseSettledResult<T>,
+  label: string,
+  fallback: T
+): { value: T; failed: boolean } {
+  if (result.status === 'fulfilled') return { value: result.value, failed: false }
+  console.warn(
+    `Keep Notes could not load ${label}:`,
+    result.reason instanceof Error ? result.reason.message : 'unknown storage error'
+  )
+  return { value: fallback, failed: true }
 }
 
 export interface UseNotesResult {
@@ -98,7 +195,10 @@ export function useNotes(): UseNotesResult {
 
   const persistSettings = useCallback((next: KeepNotesSettings) => {
     void saveSettings(next).catch((error: unknown) => {
-      console.warn('Keep Notes could not save settings:', error)
+      console.warn(
+        'Keep Notes could not save settings:',
+        error instanceof Error ? error.message : 'unknown storage error'
+      )
     })
   }, [])
 
@@ -113,9 +213,10 @@ export function useNotes(): UseNotesResult {
 
   const applySelection = useCallback(
     (id: string | null) => {
-      selectedIdRef.current = id
-      setSelectedId(id)
-      applySettings({ selectedNoteId: id })
+      const nextId = id !== null && isValidNoteId(id) ? id : null
+      selectedIdRef.current = nextId
+      setSelectedId(nextId)
+      applySettings({ selectedNoteId: nextId })
     },
     [applySettings]
   )
@@ -128,43 +229,27 @@ export function useNotes(): UseNotesResult {
     const [notesResult, settingsResult] = await Promise.allSettled([loadAllNotes(), loadSettings()])
     if (run !== loadRun.current) return
 
-    let loadFailed = false
-    let loadedNotes: Note[] = []
-    let loadedSettings: KeepNotesSettings = { ...DEFAULT_SETTINGS }
+    const loadedNotes = unwrapLoadResult(notesResult, 'notes', [] as Note[])
+    const loadedSettings = unwrapLoadResult(settingsResult, 'settings', { ...DEFAULT_SETTINGS })
 
-    if (notesResult.status === 'fulfilled') {
-      loadedNotes = notesResult.value
-    } else {
-      loadFailed = true
-      console.warn('Keep Notes could not load notes:', notesResult.reason)
-    }
-
-    if (settingsResult.status === 'fulfilled') {
-      loadedSettings = settingsResult.value
-    } else {
-      loadFailed = true
-      console.warn('Keep Notes could not load settings:', settingsResult.reason)
-    }
-
-    const byId: Record<string, Note> = {}
-    for (const note of loadedNotes) byId[note.id] = note
+    const byId = copyNotes({})
+    for (const note of loadedNotes.value) byId[note.id] = note
 
     for (const id of dirty.current) {
-      const local = notesRef.current[id]
-      if (local) byId[id] = local
+      if (!hasOwn(notesRef.current, id)) continue
+      byId[id] = notesRef.current[id]
     }
 
-    const sorted = sortNotes(Object.values(byId))
-    const storedSelected = loadedSettings.selectedNoteId
-    const nextSelected =
-      (storedSelected && byId[storedSelected] ? storedSelected : null) ?? sorted[0]?.id ?? null
+    const nextSelected = pickSelectedId(byId, loadedSettings.value.selectedNoteId)
 
     replaceNotes(byId)
-    replaceSettings({ ...loadedSettings, selectedNoteId: nextSelected })
+    replaceSettings({ ...loadedSettings.value, selectedNoteId: nextSelected })
     selectedIdRef.current = nextSelected
     setSelectedId(nextSelected)
     setLoadError(
-      loadFailed ? 'Some saved data could not be restored. Your notes may still be available.' : null
+      loadedNotes.failed || loadedSettings.failed
+        ? 'Some saved data could not be restored. Your notes may still be available.'
+        : null
     )
     setReady(true)
     setLoading(false)
@@ -175,9 +260,8 @@ export function useNotes(): UseNotesResult {
   }, [load])
 
   const persist = useCallback(async (id: string) => {
-    if (!dirty.current.has(id)) return
+    if (!dirty.current.has(id) || !hasOwn(notesRef.current, id)) return
     const note = notesRef.current[id]
-    if (!note) return
 
     const sequence = editSequence.current.get(id) ?? 0
     inflight.current += 1
@@ -192,7 +276,10 @@ export function useNotes(): UseNotesResult {
       setSaveError(null)
     } catch (error) {
       const friendly = describeStorageError(error)
-      console.error('Keep Notes could not save:', error)
+      console.error(
+        'Keep Notes could not save a note:',
+        error instanceof Error ? error.message : 'unknown storage error'
+      )
       errorRef.current = friendly
       setSaveError(friendly)
     } finally {
@@ -222,12 +309,12 @@ export function useNotes(): UseNotesResult {
 
   const mutateNote = useCallback(
     (id: string, updater: (note: Note) => Note) => {
+      if (!isValidNoteId(id) || !hasOwn(notesRef.current, id)) return
       const current = notesRef.current[id]
-      if (!current) return
       const next = updater(current)
       if (next === current) return
 
-      const nextNotes = { ...notesRef.current, [id]: next }
+      const nextNotes = Object.assign(copyNotes(notesRef.current), { [id]: next })
       notesRef.current = nextNotes
       setNotesById(nextNotes)
 
@@ -279,7 +366,8 @@ export function useNotes(): UseNotesResult {
 
   const selectNote = useCallback(
     (id: string) => {
-      if (!notesRef.current[id] || id === selectedIdRef.current) return
+      if (!isValidNoteId(id) || !hasOwn(notesRef.current, id)) return
+      if (id === selectedIdRef.current) return
       const previous = selectedIdRef.current
       if (previous) void flushOne(previous)
       applySelection(id)
@@ -293,7 +381,7 @@ export function useNotes(): UseNotesResult {
     lastCreateAt.current = now
 
     const note = createBlankNote(now)
-    replaceNotes({ ...notesRef.current, [note.id]: note })
+    replaceNotes(Object.assign(copyNotes(notesRef.current), { [note.id]: note }))
     dirty.current.add(note.id)
     editSequence.current.set(note.id, 1)
     errorRef.current = null
@@ -306,6 +394,7 @@ export function useNotes(): UseNotesResult {
 
   const deleteNote = useCallback(
     async (id: string) => {
+      if (!isValidNoteId(id)) return
       const timer = timers.current.get(id)
       if (timer) {
         clearTimeout(timer)
@@ -316,7 +405,7 @@ export function useNotes(): UseNotesResult {
 
       try {
         await deleteNoteFromStorage(id)
-        const nextNotes = { ...notesRef.current }
+        const nextNotes = copyNotes(notesRef.current)
         delete nextNotes[id]
         replaceNotes(nextNotes)
 
@@ -350,8 +439,9 @@ export function useNotes(): UseNotesResult {
 
   const setPanelPosition = useCallback(
     (position: PanelPosition) => {
+      if (!isSafeCoordinate(position.x) || !isSafeCoordinate(position.y)) return
       const current = settingsRef.current.panelPosition
-      if (current && current.x === position.x && current.y === position.y) return
+      if (current?.x === position.x && current?.y === position.y) return
       applySettings({ panelPosition: position })
     },
     [applySettings]
@@ -359,8 +449,9 @@ export function useNotes(): UseNotesResult {
 
   const setPanelSize = useCallback(
     (size: PanelSize) => {
+      if (!isSafeDimension(size.width) || !isSafeDimension(size.height)) return
       const current = settingsRef.current.panelSize
-      if (current && current.width === size.width && current.height === size.height) return
+      if (current?.width === size.width && current?.height === size.height) return
       applySettings({ panelSize: size })
     },
     [applySettings]
@@ -378,41 +469,32 @@ export function useNotes(): UseNotesResult {
     if (!ready) return
 
     return subscribeToStorage(({ changed, removedIds }, nextSettings) => {
-      if (nextSettings && nextSettings.theme !== settingsRef.current.theme) {
-        const next = { ...settingsRef.current, theme: nextSettings.theme }
+      const currentSettings = settingsRef.current
+      if (nextSettings && nextSettings.theme !== currentSettings.theme) {
+        const next = { ...currentSettings, theme: nextSettings.theme }
         settingsRef.current = next
         setSettings(next)
       }
 
       if (changed.length === 0 && removedIds.length === 0) return
 
-      let nextNotes = notesRef.current
-      let notesChanged = false
-      let removedSelected = false
+      const merged = mergeStoredNotes(
+        notesRef.current,
+        changed,
+        removedIds,
+        dirty.current,
+        selectedIdRef.current
+      )
 
-      for (const id of removedIds) {
-        if (!nextNotes[id]) continue
-        if (dirty.current.has(id)) continue
-        if (nextNotes === notesRef.current) nextNotes = { ...notesRef.current }
-        delete nextNotes[id]
-        notesChanged = true
-        if (selectedIdRef.current === id) removedSelected = true
-      }
+      if (!merged.changed) return
+      replaceNotes(merged.notes)
 
-      for (const incoming of changed) {
-        if (dirty.current.has(incoming.id)) continue
-        const current = nextNotes[incoming.id]
-        if (current && incoming.updatedAt <= current.updatedAt) continue
-        if (nextNotes === notesRef.current) nextNotes = { ...notesRef.current }
-        nextNotes[incoming.id] = incoming
-        notesChanged = true
-      }
-
-      if (!notesChanged) return
-      replaceNotes(nextNotes)
-
-      if (removedSelected || (selectedIdRef.current && !nextNotes[selectedIdRef.current])) {
-        const fallback = sortNotes(Object.values(nextNotes))[0]?.id ?? null
+      const currentSelected = selectedIdRef.current
+      if (
+        merged.removedSelected ||
+        (currentSelected !== null && !hasOwn(merged.notes, currentSelected))
+      ) {
+        const fallback = sortNotes(Object.values(merged.notes))[0]?.id ?? null
         applySelection(fallback)
       }
     })
@@ -426,7 +508,8 @@ export function useNotes(): UseNotesResult {
   }, [])
 
   const notes = useMemo(() => sortNotes(Object.values(notesById)), [notesById])
-  const selectedNote = selectedId ? notesById[selectedId] ?? null : null
+  const selectedNote =
+    selectedId !== null && hasOwn(notesById, selectedId) ? notesById[selectedId] : null
 
   return {
     ready,

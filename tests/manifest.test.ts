@@ -17,6 +17,15 @@ describe('manifest', () => {
     expect(manifest.content_scripts).toBeUndefined()
   })
 
+  it('declares a restrictive extension CSP and exposes no web resources', () => {
+    const csp = manifest.content_security_policy?.extension_pages
+    expect(typeof csp).toBe('string')
+    expect(csp).toContain("script-src 'self'")
+    expect(csp).not.toMatch(/unsafe-eval|unsafe-inline|https?:|\*/)
+    expect(manifest.web_accessible_resources).toBeUndefined()
+    expect(manifest.externally_connectable).toBeUndefined()
+  })
+
   it('declares icons at the required sizes', () => {
     for (const size of [16, 32, 48, 128]) {
       expect(manifest.icons[String(size)]).toBe(`icons/icon${size}.png`)

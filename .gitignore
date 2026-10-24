@@ -4,5 +4,8 @@ coverage/
 *.log
 .DS_Store
 .vite/
+.env.sonar
+.env.sonar.local
+sonar/
 *.crx
 *.pem

@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../src/App'
-import { __resetPanelBusForTests } from '../src/content/panelBus'
+import { __resetPanelBusForTests, panelBus } from '../src/content/panelBus'
 import {
   NOTE_KEY_PREFIX,
   SETTINGS_KEY,
@@ -84,7 +84,7 @@ describe('Keep Notes panel', () => {
     expect((reopenedContent as HTMLTextAreaElement).value).toContain('Body text')
 
     await user.click(screen.getByRole('button', { name: 'Show notes list' }))
-    await user.click(screen.getByRole('button', { name: 'Delete note: Project ideas' }))
+    await user.click(screen.getByRole('button', { name: 'Delete note' }))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(screen.getByText('No notes yet')).toBeTruthy())
@@ -138,6 +138,127 @@ describe('Keep Notes panel', () => {
 
     const title = screen.getByRole('textbox', { name: 'Note title' }) as HTMLInputElement
     expect(title.value).toBe('Saved title')
+  })
+
+  it('flushes notes when closing and when the page is hidden', async () => {
+    const fake = installFakeChrome()
+    const user = userEvent.setup()
+
+    render(<App getPageSelection={() => ''} />)
+    await screen.findByText('A quiet place for your thoughts')
+    await user.click(screen.getByRole('button', { name: 'Create your first note' }))
+
+    const content = await screen.findByRole('textbox', { name: 'Note content' })
+    await user.type(content, 'Flush me')
+
+    await user.click(screen.getByRole('button', { name: 'Close Keep Notes' }))
+    await waitFor(() => expect(storedNotes(fake.data)).toHaveLength(1))
+
+    panelBus.open()
+    await screen.findByRole('textbox', { name: 'Note content' })
+
+    window.dispatchEvent(new Event('pagehide'))
+
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'hidden',
+    })
+    document.dispatchEvent(new Event('visibilitychange'))
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'visible',
+    })
+
+    await waitFor(() =>
+      expect((storedNotes(fake.data)[0] as Note).content).toContain('Flush me')
+    )
+  })
+
+  it('handles keyboard shortcuts and escape navigation', async () => {
+    installFakeChrome()
+    const user = userEvent.setup()
+
+    render(<App getPageSelection={() => ''} />)
+    await screen.findByText('A quiet place for your thoughts')
+
+    const panel = document.querySelector('[data-keep-notes-panel]') as HTMLElement
+    fireEvent.keyDown(panel, { key: 'Enter', ctrlKey: true })
+
+    const content = await screen.findByRole('textbox', { name: 'Note content' })
+    fireEvent.keyDown(content, { key: 'Escape' })
+    expect(document.activeElement).toBe(panel)
+
+    fireEvent.keyDown(panel, { key: 'Escape' })
+    await waitFor(() => expect(panelBus.getSnapshot().visible).toBe(false))
+
+    panelBus.open()
+    await screen.findByRole('textbox', { name: 'Note content' })
+    await user.click(screen.getByRole('button', { name: 'Show notes list' }))
+    await user.click(screen.getByRole('button', { name: /Delete note/ }))
+    expect(screen.getByText('Delete this note?')).toBeTruthy()
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Cancel' }), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByText('Delete this note?')).toBeNull())
+
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    await waitFor(() => expect(panelBus.getSnapshot().visible).toBe(false))
+  })
+
+  it('shows load errors and retries loading', async () => {
+    const fake = installFakeChrome()
+    fake.get.mockRejectedValue(new Error('read failed'))
+    const user = userEvent.setup()
+
+    render(<App getPageSelection={() => ''} />)
+
+    const banner = await screen.findByText(/Some saved data could not be restored/)
+    expect(banner).toBeTruthy()
+
+    fake.get.mockResolvedValue({})
+    await user.click(screen.getByRole('button', { name: 'Retry' }))
+
+    await waitFor(() =>
+      expect(screen.queryByText(/Some saved data could not be restored/)).toBeNull()
+    )
+  })
+
+  it('shows save errors as a toast and retries from the footer', async () => {
+    const fake = installFakeChrome()
+    fake.set.mockRejectedValue(new Error('write failed'))
+    const user = userEvent.setup()
+
+    render(<App getPageSelection={() => ''} />)
+    await screen.findByText('A quiet place for your thoughts')
+    await user.click(screen.getByRole('button', { name: 'Create your first note' }))
+
+    const content = await screen.findByRole('textbox', { name: 'Note content' })
+    await user.type(content, 'Unsaved words')
+
+    await waitFor(() => expect(screen.getAllByText('Unable to save').length).toBeGreaterThan(0))
+
+    await user.click(screen.getByRole('button', { name: 'Show notes list' }))
+    await waitFor(() => expect(screen.getAllByText(/Unable to save/).length).toBeGreaterThan(0))
+
+    await user.click(screen.getByRole('button', { name: 'Show note editor' }))
+    fake.set.mockResolvedValue(undefined)
+    await user.click(screen.getByRole('button', { name: 'Retry' }))
+
+    await waitFor(() => expect(screen.getByText('Saved')).toBeTruthy())
+  })
+
+  it('cycles the theme from the footer', async () => {
+    installFakeChrome()
+    const user = userEvent.setup()
+
+    render(<App getPageSelection={() => ''} />)
+    await screen.findByText('A quiet place for your thoughts')
+
+    await user.click(screen.getByRole('button', { name: /Theme: System/ }))
+    await user.click(screen.getByRole('button', { name: /Theme: Light/ }))
+    await user.click(screen.getByRole('button', { name: /Theme: Dark/ }))
+
+    expect(screen.getByRole('button', { name: /Theme: System/ })).toBeTruthy()
   })
 
   it('resumes automatic titles after a custom title is cleared', async () => {

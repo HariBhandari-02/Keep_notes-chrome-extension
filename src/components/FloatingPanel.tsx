@@ -7,7 +7,16 @@ import {
   type ResizeCallback,
   type ResizeStartCallback,
 } from 're-resizable'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import type { PanelState } from '../content/panelBus'
 import { useDraggable } from '../hooks/useDraggable'
 import type { UseNotesResult } from '../hooks/useNotes'
@@ -86,11 +95,11 @@ function EmptyState({
   hasNotes,
   onCreate,
   onBrowse,
-}: {
+}: Readonly<{
   hasNotes: boolean
   onCreate: () => void
   onBrowse: () => void
-}) {
+}>) {
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-8 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-500 dark:bg-indigo-500/10 dark:text-indigo-300">
@@ -116,7 +125,83 @@ function EmptyState({
   )
 }
 
-export function FloatingPanel({ store, panelState, getPageSelection, onClose }: FloatingPanelProps) {
+function usePanelKeydown({
+  panelRef,
+  confirmDeleteId,
+  handleClose,
+  handleCreate,
+  handleCancelDelete,
+}: Readonly<{
+  panelRef: RefObject<HTMLElement | null>
+  confirmDeleteId: string | null
+  handleClose: () => void
+  handleCreate: () => void
+  handleCancelDelete: () => void
+}>) {
+  useEffect(() => {
+    const panel = panelRef.current
+    if (!panel) return
+
+    const handlePanelKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        event.preventDefault()
+        handleCreate()
+        return
+      }
+
+      if (event.key !== 'Escape') return
+
+      if (confirmDeleteId) {
+        event.preventDefault()
+        handleCancelDelete()
+        return
+      }
+
+      const origin = event.target
+      if (
+        origin instanceof HTMLElement &&
+        (origin.tagName === 'INPUT' ||
+          origin.tagName === 'TEXTAREA' ||
+          origin.isContentEditable)
+      ) {
+        event.preventDefault()
+        origin.blur()
+        panel.focus({ preventScroll: true })
+        return
+      }
+
+      event.preventDefault()
+      handleClose()
+    }
+
+    panel.addEventListener('keydown', handlePanelKeyDown)
+    return () => panel.removeEventListener('keydown', handlePanelKeyDown)
+  }, [confirmDeleteId, handleCancelDelete, handleClose, handleCreate, panelRef])
+
+  useEffect(() => {
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      const panel = panelRef.current
+      if (!panel || event.composedPath().includes(panel)) return
+
+      const active = document.activeElement
+      if (active === document.body || active === null) {
+        event.preventDefault()
+        handleClose()
+      }
+    }
+
+    globalThis.addEventListener('keydown', handleWindowKeyDown)
+    return () => globalThis.removeEventListener('keydown', handleWindowKeyDown)
+  }, [handleClose, panelRef])
+}
+
+export function FloatingPanel({
+  store,
+  panelState,
+  getPageSelection,
+  onClose,
+}: Readonly<FloatingPanelProps>) {
   const {
     notes,
     selectedNote,
@@ -147,8 +232,8 @@ export function FloatingPanel({ store, panelState, getPageSelection, onClose }: 
   const [isResizing, setIsResizing] = useState(false)
   const [preferredSize, setPreferredSize] = useState<PanelSize | null>(settings.panelSize)
   const [viewport, setViewport] = useState(() => ({
-    width: window.innerWidth,
-    height: window.innerHeight,
+    width: globalThis.innerWidth,
+    height: globalThis.innerHeight,
   }))
 
   const panelRef = useRef<HTMLElement | null>(null)
@@ -168,13 +253,13 @@ export function FloatingPanel({ store, panelState, getPageSelection, onClose }: 
         saved,
         panelSize.width,
         panelSize.height,
-        window.innerWidth,
-        window.innerHeight
+        globalThis.innerWidth,
+        globalThis.innerHeight
       )
     }
     return defaultPanelPosition(
-      window.innerWidth,
-      window.innerHeight,
+      globalThis.innerWidth,
+      globalThis.innerHeight,
       panelSize.width,
       panelSize.height
     )
@@ -226,9 +311,9 @@ export function FloatingPanel({ store, panelState, getPageSelection, onClose }: 
 
   useEffect(() => {
     const handleResize = () =>
-      setViewport({ width: window.innerWidth, height: window.innerHeight })
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+      setViewport({ width: globalThis.innerWidth, height: globalThis.innerHeight })
+    globalThis.addEventListener('resize', handleResize)
+    return () => globalThis.removeEventListener('resize', handleResize)
   }, [])
 
   useEffect(() => {
@@ -251,8 +336,8 @@ export function FloatingPanel({ store, panelState, getPageSelection, onClose }: 
           direction,
           startPosition,
           startSize,
-          window.innerWidth,
-          window.innerHeight
+          globalThis.innerWidth,
+          globalThis.innerHeight
         )
       )
       setIsResizing(true)
@@ -357,60 +442,76 @@ export function FloatingPanel({ store, panelState, getPageSelection, onClose }: 
     if (selectedNote) setEditorFocusSignal((value) => value + 1)
   }, [panelState.focusToken])
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const panel = panelRef.current
-      if (!panel) return
+  const handleCancelDelete = useCallback(() => {
+    setConfirmDeleteId(null)
+  }, [])
 
-      const insidePanel = event.composedPath().includes(panel)
-      if (!insidePanel) {
-        if (event.key !== 'Escape') return
-        const active = document.activeElement
-        if (active === document.body || active === null) {
-          event.preventDefault()
-          handleClose()
-        }
-        return
-      }
+  usePanelKeydown({
+    panelRef,
+    confirmDeleteId,
+    handleClose,
+    handleCreate,
+    handleCancelDelete,
+  })
 
-      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-        event.preventDefault()
-        handleCreate()
-        return
-      }
-
-      if (event.key !== 'Escape') return
-
-      if (confirmDeleteId) {
-        event.preventDefault()
-        setConfirmDeleteId(null)
-        return
-      }
-
-      const origin = event.composedPath()[0]
-      if (
-        origin instanceof HTMLElement &&
-        (origin.tagName === 'INPUT' ||
-          origin.tagName === 'TEXTAREA' ||
-          origin.isContentEditable)
-      ) {
-        event.preventDefault()
-        origin.blur()
-        panel.focus({ preventScroll: true })
-        return
-      }
-
-      event.preventDefault()
-      handleClose()
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [confirmDeleteId, handleClose, handleCreate])
-
-  const noteCountLabel = `${filteredNotes.length}${query ? ` of ${notes.length}` : ''} ${
+  const countSuffix = query ? ` of ${notes.length}` : ''
+  const noteCountLabel = `${filteredNotes.length}${countSuffix} ${
     notes.length === 1 ? 'note' : 'notes'
   }`
+
+  let panelContent: ReactNode
+  if (view === 'list') {
+    panelContent = (
+      <NoteList
+        notes={filteredNotes}
+        totalCount={notes.length}
+        query={query}
+        selectedId={selectedId}
+        confirmDeleteId={confirmDeleteId}
+        onQueryChange={setQuery}
+        onSelect={handleSelect}
+        onRequestDelete={setConfirmDeleteId}
+        onCancelDelete={handleCancelDelete}
+        onConfirmDelete={handleConfirmDelete}
+        onCreate={handleCreate}
+      />
+    )
+  } else if (selectedNote) {
+    panelContent = (
+      <NoteEditor
+        key={selectedNote.id}
+        note={selectedNote}
+        focusSignal={editorFocusSignal}
+        getPageSelection={getPageSelection}
+        onChangeContent={(content) => updateContent(selectedNote.id, content)}
+        onChangeTitle={(title) => updateTitle(selectedNote.id, title)}
+        onNotice={showToast}
+      />
+    )
+  } else {
+    panelContent = (
+      <EmptyState
+        hasNotes={notes.length > 0}
+        onCreate={handleCreate}
+        onBrowse={() => setView('list')}
+      />
+    )
+  }
+
+  const resizeProps: {
+    minWidth?: number
+    maxWidth?: number
+    minHeight?: number
+    maxHeight?: number
+    enable?: Enable | false
+  } = { enable: false }
+  if (!minimized) {
+    resizeProps.minWidth = resizeLimits.minWidth
+    resizeProps.maxWidth = resizeLimits.maxWidth
+    resizeProps.minHeight = resizeLimits.minHeight
+    resizeProps.maxHeight = resizeLimits.maxHeight
+    resizeProps.enable = RESIZE_ENABLE
+  }
 
   return (
     <Resizable
@@ -421,11 +522,7 @@ export function FloatingPanel({ store, panelState, getPageSelection, onClose }: 
         width: panelSize.width,
         height: minimized ? 'auto' : panelSize.height,
       }}
-      minWidth={minimized ? undefined : resizeLimits.minWidth}
-      maxWidth={minimized ? undefined : resizeLimits.maxWidth}
-      minHeight={minimized ? undefined : resizeLimits.minHeight}
-      maxHeight={minimized ? undefined : resizeLimits.maxHeight}
-      enable={minimized ? false : RESIZE_ENABLE}
+      {...resizeProps}
       handleClasses={RESIZE_HANDLE_CLASSES}
       handleStyles={RESIZE_HANDLE_STYLES}
       onResizeStart={handleResizeStart}
@@ -472,37 +569,7 @@ export function FloatingPanel({ store, panelState, getPageSelection, onClose }: 
               </div>
             )}
 
-            {view === 'list' ? (
-              <NoteList
-                notes={filteredNotes}
-                totalCount={notes.length}
-                query={query}
-                selectedId={selectedId}
-                confirmDeleteId={confirmDeleteId}
-                onQueryChange={setQuery}
-                onSelect={handleSelect}
-                onRequestDelete={setConfirmDeleteId}
-                onCancelDelete={() => setConfirmDeleteId(null)}
-                onConfirmDelete={handleConfirmDelete}
-                onCreate={handleCreate}
-              />
-            ) : selectedNote ? (
-              <NoteEditor
-                key={selectedNote.id}
-                note={selectedNote}
-                focusSignal={editorFocusSignal}
-                getPageSelection={getPageSelection}
-                onChangeContent={(content) => updateContent(selectedNote.id, content)}
-                onChangeTitle={(title) => updateTitle(selectedNote.id, title)}
-                onNotice={showToast}
-              />
-            ) : (
-              <EmptyState
-                hasNotes={notes.length > 0}
-                onCreate={handleCreate}
-                onBrowse={() => setView('list')}
-              />
-            )}
+            {panelContent}
           </div>
 
           <footer className="flex h-9 shrink-0 items-center justify-between gap-2 border-t border-neutral-200/80 px-3 dark:border-neutral-800">
