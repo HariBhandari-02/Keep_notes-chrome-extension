@@ -6,7 +6,7 @@ interface SearchInputProps {
   onChange: (value: string) => void
 }
 
-export function SearchInput({ value, onChange }: SearchInputProps) {
+export function SearchInput({ value, onChange }: Readonly<SearchInputProps>) {
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Escape') return
     event.stopPropagation()

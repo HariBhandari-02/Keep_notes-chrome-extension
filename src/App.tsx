@@ -8,7 +8,7 @@ interface AppProps {
   getPageSelection: () => string
 }
 
-export default function App({ getPageSelection }: AppProps) {
+export default function App({ getPageSelection }: Readonly<AppProps>) {
   const store = useNotes()
   const panelState = useSyncExternalStore(
     panelBus.subscribe,
@@ -34,10 +34,10 @@ export default function App({ getPageSelection }: AppProps) {
       if (document.visibilityState === 'hidden') flush()
     }
 
-    window.addEventListener('pagehide', flush)
+    globalThis.addEventListener('pagehide', flush)
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => {
-      window.removeEventListener('pagehide', flush)
+      globalThis.removeEventListener('pagehide', flush)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [store.flushAll])

@@ -8,7 +8,7 @@ interface SaveStatusProps {
   onRetry: () => void
 }
 
-export function SaveStatus({ state, error, onRetry }: SaveStatusProps) {
+export function SaveStatus({ state, error, onRetry }: Readonly<SaveStatusProps>) {
   return (
     <div
       role="status"

@@ -11,7 +11,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "audit": "npm audit --omit=dev",
+    "security:check": "npm run typecheck && npm test && npm run build && npm run verify && npm run audit",
     "sonar": "npm run test:coverage && bash scripts/sonar.sh",
+    "sonar:fetch": "node --experimental-strip-types scripts/sonar-fetch.ts",
     "verify": "node scripts/verify-dist.mjs",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
   },

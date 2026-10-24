@@ -1,24 +1,42 @@
 import type { Note } from '../types/note'
 import { deriveTitle } from './generateTitle'
+import {
+  MAX_NOTE_CONTENT_LENGTH,
+  MAX_NOTE_TITLE_LENGTH,
+  MAX_SEARCH_QUERY_LENGTH,
+  clampText,
+  isSafeTimestamp,
+  isValidNoteId,
+} from './noteLimits'
+
+const MAX_PREVIEW_LENGTH = 280
 
 export function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
 }
 
-export function normalizeNote(raw: unknown, now = Date.now()): Note | null {
-  if (!raw || typeof raw !== 'object') return null
-  const record = raw as Record<string, unknown>
-  if (typeof record.id !== 'string' || record.id.length === 0) return null
-  if (typeof record.content !== 'string') return null
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
-  const content = record.content
-  const createdAt = isFiniteNumber(record.createdAt) ? record.createdAt : now
-  const updatedAt = isFiniteNumber(record.updatedAt) ? record.updatedAt : createdAt
-  const rawTitle = typeof record.title === 'string' ? record.title : ''
-  const customTitle = record.customTitle === true && rawTitle.trim().length > 0
+function safeTimestamp(value: unknown, fallback: number): number {
+  return isSafeTimestamp(value) ? value : fallback
+}
+
+export function normalizeNote(raw: unknown, now = Date.now()): Note | null {
+  if (!isRecord(raw)) return null
+  if (!isValidNoteId(raw.id)) return null
+  if (typeof raw.content !== 'string') return null
+
+  const content = clampText(raw.content, MAX_NOTE_CONTENT_LENGTH)
+  const createdAt = safeTimestamp(raw.createdAt, now)
+  const updatedAt = safeTimestamp(raw.updatedAt, createdAt)
+  const rawTitle =
+    typeof raw.title === 'string' ? clampText(raw.title, MAX_NOTE_TITLE_LENGTH) : ''
+  const customTitle = raw.customTitle === true && rawTitle.trim().length > 0
 
   return {
-    id: record.id,
+    id: raw.id,
     title: customTitle ? rawTitle : deriveTitle(content),
     customTitle,
     content,
@@ -28,20 +46,22 @@ export function normalizeNote(raw: unknown, now = Date.now()): Note | null {
 }
 
 export function updateNoteContent(note: Note, content: string, now = Date.now()): Note {
-  if (note.content === content) return note
+  const nextContent = clampText(content, MAX_NOTE_CONTENT_LENGTH)
+  if (note.content === nextContent) return note
   return {
     ...note,
-    content,
-    title: note.customTitle ? note.title : deriveTitle(content),
+    content: nextContent,
+    title: note.customTitle ? note.title : deriveTitle(nextContent),
     updatedAt: now,
   }
 }
 
 export function updateNoteTitle(note: Note, title: string, now = Date.now()): Note {
-  const customTitle = title.trim().length > 0
+  const nextTitle = clampText(title, MAX_NOTE_TITLE_LENGTH)
+  const customTitle = nextTitle.trim().length > 0
   return {
     ...note,
-    title: customTitle ? title : deriveTitle(note.content),
+    title: customTitle ? nextTitle : deriveTitle(note.content),
     customTitle,
     updatedAt: now,
   }
@@ -53,12 +73,14 @@ export function displayTitle(note: Note): string {
 }
 
 export function contentPreview(content: string): string {
-  const collapsed = content.replace(/\s+/g, ' ').trim()
+  const sample =
+    content.length > MAX_PREVIEW_LENGTH ? content.slice(0, MAX_PREVIEW_LENGTH) : content
+  const collapsed = sample.replaceAll(/\s+/g, ' ').trim()
   return collapsed
 }
 
 export function filterNotes(notes: Note[], query: string): Note[] {
-  const needle = query.trim().toLocaleLowerCase()
+  const needle = clampText(query.trim(), MAX_SEARCH_QUERY_LENGTH).toLocaleLowerCase()
   if (!needle) return notes
   return notes.filter((note) => {
     const title = displayTitle(note).toLocaleLowerCase()
@@ -115,7 +137,7 @@ export function formatRelativeTime(timestamp: number, now = Date.now()): string 
     return new Intl.DateTimeFormat(undefined, {
       month: 'short',
       day: 'numeric',
-      year: new Date(timestamp).getFullYear() !== new Date(now).getFullYear() ? 'numeric' : undefined,
+      year: new Date(timestamp).getFullYear() === new Date(now).getFullYear() ? undefined : 'numeric',
     }).format(timestamp)
   } catch {
     return new Date(timestamp).toLocaleDateString()

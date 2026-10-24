@@ -1,10 +1,18 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Note } from '../src/types/note'
+import {
+  MAX_NOTE_CONTENT_LENGTH,
+  MAX_NOTE_TITLE_LENGTH,
+  isValidNoteId,
+} from '../src/utils/noteLimits'
 import {
   contentPreview,
   createBlankNote,
+  createNoteId,
   filterNotes,
+  formatRelativeTime,
   normalizeNote,
+  sortNotes,
   updateNoteContent,
   updateNoteTitle,
 } from '../src/utils/noteUtils'
@@ -64,6 +72,50 @@ describe('normalizeNote', () => {
     expect(normalized?.customTitle).toBe(false)
     expect(normalized?.title).toBe('Content title')
   })
+
+  it('rejects invalid and prototype-polluting note ids', () => {
+    for (const id of [
+      '',
+      ' ',
+      '__proto__',
+      'constructor',
+      'prototype',
+      'has spaces',
+      '../escape',
+      'a'.repeat(129),
+      '../keepnotes:settings',
+    ]) {
+      expect(normalizeNote({ id, content: 'body' })).toBeNull()
+      expect(isValidNoteId(id)).toBe(false)
+    }
+  })
+
+  it('sanitizes malformed timestamps', () => {
+    const normalized = normalizeNote(
+      {
+        id: 'timestamps',
+        content: 'body',
+        createdAt: Number.NaN,
+        updatedAt: -1,
+      },
+      1234
+    )
+
+    expect(normalized?.createdAt).toBe(1234)
+    expect(normalized?.updatedAt).toBe(1234)
+  })
+
+  it('clamps oversized stored content and titles', () => {
+    const normalized = normalizeNote({
+      id: 'huge',
+      title: 't'.repeat(MAX_NOTE_TITLE_LENGTH + 50),
+      customTitle: true,
+      content: 'c'.repeat(MAX_NOTE_CONTENT_LENGTH + 50),
+    })
+
+    expect(normalized?.title).toHaveLength(MAX_NOTE_TITLE_LENGTH)
+    expect(normalized?.content).toHaveLength(MAX_NOTE_CONTENT_LENGTH)
+  })
 })
 
 describe('title updates', () => {
@@ -98,6 +150,16 @@ describe('title updates', () => {
     const updated = updateNoteTitle(note({ content: 'body' }), 'My title', 10)
     expect(updated.customTitle).toBe(true)
     expect(updated.title).toBe('My title')
+  })
+
+  it('clamps direct content and title updates to storage limits', () => {
+    const largeContent = 'c'.repeat(MAX_NOTE_CONTENT_LENGTH + 100)
+    const contentUpdated = updateNoteContent(note(), largeContent)
+    expect(contentUpdated.content).toHaveLength(MAX_NOTE_CONTENT_LENGTH)
+
+    const largeTitle = 't'.repeat(MAX_NOTE_TITLE_LENGTH + 100)
+    const titleUpdated = updateNoteTitle(note(), largeTitle)
+    expect(titleUpdated.title).toHaveLength(MAX_NOTE_TITLE_LENGTH)
   })
 })
 
@@ -146,5 +208,57 @@ describe('helpers', () => {
   it('builds compact previews', () => {
     expect(contentPreview('line one\n\n  line two  ')).toBe('line one line two')
     expect(contentPreview('   ')).toBe('')
+  })
+
+  it('bounds preview work for very large notes', () => {
+    const preview = contentPreview(`start ${'x'.repeat(MAX_NOTE_CONTENT_LENGTH)}`)
+    expect(preview.length).toBeLessThanOrEqual(280)
+  })
+
+  it('returns the same note when content is unchanged', () => {
+    const original = note({ content: 'same' })
+    expect(updateNoteContent(original, 'same')).toBe(original)
+  })
+
+  it('sorts notes by most recently updated', () => {
+    const older = note({ id: 'older', updatedAt: 1 })
+    const newer = note({ id: 'newer', updatedAt: 10 })
+    expect(sortNotes([older, newer]).map((item) => item.id)).toEqual(['newer', 'older'])
+  })
+
+  it('creates ids without crypto.randomUUID', () => {
+    vi.stubGlobal('crypto', {})
+    try {
+      expect(createNoteId()).toMatch(/^note-/)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('formats recent times as relative labels', () => {
+    const now = 1_000_000_000
+    expect(formatRelativeTime(now - 10_000, now)).toBe('just now')
+    expect(formatRelativeTime(now - 5 * 60_000, now)).toBe('5m ago')
+    expect(formatRelativeTime(now - 3 * 60 * 60_000, now)).toBe('3h ago')
+    expect(formatRelativeTime(now - 24 * 60 * 60_000, now)).toBe('yesterday')
+    expect(formatRelativeTime(now - 3 * 24 * 60 * 60_000, now)).toBe('3d ago')
+  })
+
+  it('formats older dates with an absolute date', () => {
+    const now = new Date('2026-06-15T12:00:00Z').getTime()
+    const old = new Date('2024-01-10T12:00:00Z').getTime()
+    const formatted = formatRelativeTime(old, now)
+    expect(formatted).toContain('2024')
+  })
+
+  it('falls back when date formatting throws', () => {
+    const spy = vi.spyOn(Intl, 'DateTimeFormat').mockImplementationOnce(() => {
+      throw new Error('no intl')
+    })
+    const now = new Date('2026-06-15T12:00:00Z').getTime()
+    const old = new Date('2024-01-10T12:00:00Z').getTime()
+
+    expect(formatRelativeTime(old, now).length).toBeGreaterThan(0)
+    spy.mockRestore()
   })
 })

@@ -6,7 +6,7 @@ export function firstMeaningfulLine(content: string): string {
   if (!content) return ''
   const lines = content.split(/\r\n|\r|\n/)
   for (const line of lines) {
-    const normalized = line.replace(/\s+/g, ' ').trim()
+    const normalized = line.replaceAll(/\s+/g, ' ').trim()
     if (normalized.length > 0) return normalized
   }
   return ''

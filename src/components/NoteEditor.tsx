@@ -2,6 +2,10 @@ import { ClipboardPlus } from 'lucide-react'
 import { useEffect, useRef, useState, type FocusEvent } from 'react'
 import type { Note } from '../types/note'
 import { deriveTitleInputValue } from '../utils/generateTitle'
+import {
+  MAX_NOTE_CONTENT_LENGTH,
+  MAX_NOTE_TITLE_LENGTH,
+} from '../utils/noteLimits'
 import { formatRelativeTime } from '../utils/noteUtils'
 
 interface NoteEditorProps {
@@ -20,18 +24,19 @@ export function NoteEditor({
   onChangeContent,
   onChangeTitle,
   onNotice,
-}: NoteEditorProps) {
+}: Readonly<NoteEditorProps>) {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const titleRef = useRef<HTMLInputElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   const autoTitle = deriveTitleInputValue(note.content)
-  const titleValue = editingTitle
-    ? titleDraft
-    : note.customTitle
-      ? note.title
-      : autoTitle
+  let titleValue = autoTitle
+  if (editingTitle) {
+    titleValue = titleDraft
+  } else if (note.customTitle) {
+    titleValue = note.title
+  }
   const titlePlaceholder = note.customTitle ? 'Add a title…' : autoTitle || 'Untitled note'
 
   useEffect(() => {
@@ -63,16 +68,31 @@ export function NoteEditor({
   }
 
   const handleAddSelection = () => {
-    const selection = getPageSelection()
-    if (!selection.trim()) {
+    const selection = getPageSelection().trim()
+    if (!selection) {
       onNotice('Select some text on the page first.')
       return
     }
 
-    const separator = !note.content ? '' : note.content.endsWith('\n') ? '\n' : '\n\n'
-    const nextContent = `${note.content}${separator}${selection.trim()}`
+    let separator = ''
+    if (note.content) {
+      separator = note.content.endsWith('\n') ? '\n' : '\n\n'
+    }
+
+    const available = MAX_NOTE_CONTENT_LENGTH - note.content.length - separator.length
+    if (available <= 0) {
+      onNotice('This note is at its maximum length.')
+      return
+    }
+
+    const addition = selection.slice(0, available)
+    const nextContent = `${note.content}${separator}${addition}`
     onChangeContent(nextContent)
-    onNotice('Selected text added to note')
+    onNotice(
+      addition.length < selection.length
+        ? 'Selected text was shortened to fit the note limit'
+        : 'Selected text added to note'
+    )
     setEditingTitle(false)
 
     requestAnimationFrame(() => {
@@ -95,6 +115,7 @@ export function NoteEditor({
           onBlur={() => setEditingTitle(false)}
           placeholder={titlePlaceholder}
           aria-label="Note title"
+          maxLength={MAX_NOTE_TITLE_LENGTH}
           spellCheck={false}
           className="w-full rounded-md border-0 bg-transparent px-0.5 text-[17px] font-semibold leading-6 tracking-[-0.015em] text-neutral-900 outline-none placeholder:font-medium placeholder:text-neutral-400 focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:text-neutral-50 dark:placeholder:text-neutral-500"
         />
@@ -120,6 +141,7 @@ export function NoteEditor({
         onChange={(event) => onChangeContent(event.target.value)}
         placeholder="Start writing…"
         aria-label="Note content"
+        maxLength={MAX_NOTE_CONTENT_LENGTH}
         spellCheck
         className="keep-notes-editor keep-notes-scroll min-h-0 flex-1 resize-none border-0 bg-transparent px-4 pb-3 pt-1 text-[13.5px] leading-[1.65] text-neutral-800 outline-none placeholder:text-neutral-400 dark:text-neutral-100 dark:placeholder:text-neutral-500"
       />

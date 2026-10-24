@@ -6,12 +6,17 @@ import {
   deleteNote,
   flushAllNotes,
   loadAllNotes,
+  loadNote,
   loadSettings,
   normalizeSettings,
   queueNoteSave,
   saveSettings,
 } from '../src/services/notesStorage'
 import type { Note } from '../src/types/note'
+import {
+  MAX_NOTE_CONTENT_LENGTH,
+  MAX_NOTE_TITLE_LENGTH,
+} from '../src/utils/noteLimits'
 import { installFakeChrome } from './helpers/fakeChrome'
 
 function makeNote(overrides: Partial<Note> = {}): Note {
@@ -93,6 +98,69 @@ describe('notes storage', () => {
     expect(notes.map((note) => note.id)).toEqual(['valid'])
   })
 
+  it('ignores storage keys with unsafe or prototype-polluting ids', async () => {
+    const fake = installFakeChrome()
+    fake.data[`${NOTE_KEY_PREFIX}__proto__`] = makeNote({ id: '__proto__' })
+    fake.data[`${NOTE_KEY_PREFIX}constructor`] = makeNote({ id: 'constructor' })
+    fake.data[`${NOTE_KEY_PREFIX}${'a'.repeat(129)}`] = makeNote({ id: 'a'.repeat(129) })
+    fake.data[`${NOTE_KEY_PREFIX}safe-id`] = makeNote({ id: 'safe-id' })
+
+    const notes = await loadAllNotes()
+    expect(notes.map((note) => note.id)).toEqual(['safe-id'])
+    expect(Object.prototype).not.toHaveProperty('polluted')
+  })
+
+  it('clamps oversized stored records before exposing them', async () => {
+    const fake = installFakeChrome()
+    fake.data[`${NOTE_KEY_PREFIX}huge`] = makeNote({
+      id: 'huge',
+      title: 't'.repeat(MAX_NOTE_TITLE_LENGTH + 20),
+      content: 'c'.repeat(MAX_NOTE_CONTENT_LENGTH + 20),
+      customTitle: true,
+    })
+
+    const [stored] = await loadAllNotes()
+    expect(stored.title).toHaveLength(MAX_NOTE_TITLE_LENGTH)
+    expect(stored.content).toHaveLength(MAX_NOTE_CONTENT_LENGTH)
+  })
+
+  it('rejects invalid note ids before reading or writing', async () => {
+    const fake = installFakeChrome()
+
+    expect(await loadNote('__proto__')).toBeNull()
+    expect(fake.get).not.toHaveBeenCalled()
+
+    await deleteNote('constructor')
+    expect(fake.remove).not.toHaveBeenCalled()
+
+    await expect(queueNoteSave(makeNote({ id: '__proto__' }))).rejects.toThrow('Invalid note data')
+    expect(fake.set).not.toHaveBeenCalled()
+  })
+
+  it('normalizes malformed timestamps when loading', async () => {
+    const fake = installFakeChrome()
+    fake.data[`${NOTE_KEY_PREFIX}times`] = {
+      ...makeNote({ id: 'times' }),
+      createdAt: Number.NaN,
+      updatedAt: Number.POSITIVE_INFINITY,
+    }
+
+    const [stored] = await loadAllNotes()
+    expect(Number.isSafeInteger(stored.createdAt)).toBe(true)
+    expect(Number.isSafeInteger(stored.updatedAt)).toBe(true)
+  })
+
+  it('recovers a note after a transient write failure', async () => {
+    const fake = installFakeChrome()
+    fake.set.mockRejectedValueOnce(new Error('temporary failure'))
+
+    await expect(queueNoteSave(makeNote({ id: 'retry' }))).rejects.toThrow('temporary failure')
+    await queueNoteSave(makeNote({ id: 'retry', content: 'second attempt' }))
+    await flushAllNotes()
+
+    expect((fake.data[`${NOTE_KEY_PREFIX}retry`] as Note).content).toBe('second attempt')
+  })
+
   it('normalizes invalid settings and persists valid ones', async () => {
     const fake = installFakeChrome()
     fake.data[SETTINGS_KEY] = {
@@ -140,9 +208,55 @@ describe('notes storage', () => {
     })
   })
 
+  it('rejects unsafe settings values and selected note ids', () => {
+    const settings = normalizeSettings({
+      panelPosition: { x: Number.POSITIVE_INFINITY, y: 1e300 },
+      panelSize: { width: 1e300, height: -1 },
+      selectedNoteId: '__proto__',
+    })
+
+    expect(settings.panelPosition).toBeNull()
+    expect(settings.panelSize).toBeNull()
+    expect(settings.selectedNoteId).toBeNull()
+  })
+
   it('reports storage write failures', async () => {
     installFakeChrome({ failWrites: true })
     await expect(queueNoteSave(makeNote())).rejects.toThrow('storage write failed')
+  })
+
+  it('loads a single note and tolerates missing records', async () => {
+    const fake = installFakeChrome()
+    fake.data[`${NOTE_KEY_PREFIX}one`] = makeNote({ id: 'one' })
+
+    expect((await loadNote('one'))?.id).toBe('one')
+    expect(await loadNote('missing')).toBeNull()
+  })
+
+  it('skips saving notes that were deleted', async () => {
+    const fake = installFakeChrome()
+
+    await deleteNote('gone')
+    await queueNoteSave(makeNote({ id: 'gone' }))
+    await flushAllNotes()
+
+    expect(fake.data[`${NOTE_KEY_PREFIX}gone`]).toBeUndefined()
+  })
+
+  it('reports delete failures', async () => {
+    const fake = installFakeChrome()
+    fake.remove.mockRejectedValueOnce(new Error('remove failed'))
+
+    await expect(deleteNote('x')).rejects.toThrow('remove failed')
+
+    await queueNoteSave(makeNote({ id: 'x' }))
+    await flushAllNotes()
+    expect(fake.data[`${NOTE_KEY_PREFIX}x`]).toBeDefined()
+  })
+
+  it('rejects storage access when chrome is unavailable', async () => {
+    vi.stubGlobal('chrome', undefined)
+    await expect(loadAllNotes()).rejects.toThrow('Chrome storage is unavailable')
   })
 
   it('stores each note under its own key', async () => {
