@@ -1,4 +1,4 @@
-import type { Note } from '../types/note'
+import type { Note, NoteMark } from '../types/note'
 import { deriveTitle } from './generateTitle'
 import {
   MAX_NOTE_CONTENT_LENGTH,
@@ -8,6 +8,7 @@ import {
   isSafeTimestamp,
   isValidNoteId,
 } from './noteLimits'
+import { marksEqual, normalizeMarks } from './noteMarks'
 
 const MAX_PREVIEW_LENGTH = 280
 
@@ -23,6 +24,12 @@ function safeTimestamp(value: unknown, fallback: number): number {
   return isSafeTimestamp(value) ? value : fallback
 }
 
+function withMarks(note: Note, marks: NoteMark[]): Note {
+  if (marks.length > 0) return { ...note, marks }
+  const { marks: _omitted, ...plain } = note
+  return plain
+}
+
 export function normalizeNote(raw: unknown, now = Date.now()): Note | null {
   if (!isRecord(raw)) return null
   if (!isValidNoteId(raw.id)) return null
@@ -35,7 +42,7 @@ export function normalizeNote(raw: unknown, now = Date.now()): Note | null {
     typeof raw.title === 'string' ? clampText(raw.title, MAX_NOTE_TITLE_LENGTH) : ''
   const customTitle = raw.customTitle === true && rawTitle.trim().length > 0
 
-  return {
+  const note: Note = {
     id: raw.id,
     title: customTitle ? rawTitle : deriveTitle(content),
     customTitle,
@@ -43,17 +50,28 @@ export function normalizeNote(raw: unknown, now = Date.now()): Note | null {
     createdAt,
     updatedAt,
   }
+  return withMarks(note, normalizeMarks(raw.marks, content.length))
 }
 
-export function updateNoteContent(note: Note, content: string, now = Date.now()): Note {
+/** Omitting `marks` keeps the note's existing formatting, clamped to the new content. */
+export function updateNoteContent(
+  note: Note,
+  content: string,
+  marks: readonly NoteMark[] = note.marks ?? [],
+  now = Date.now()
+): Note {
   const nextContent = clampText(content, MAX_NOTE_CONTENT_LENGTH)
-  if (note.content === nextContent) return note
-  return {
-    ...note,
-    content: nextContent,
-    title: note.customTitle ? note.title : deriveTitle(nextContent),
-    updatedAt: now,
-  }
+  const nextMarks = normalizeMarks(marks, nextContent.length)
+  if (note.content === nextContent && marksEqual(note.marks ?? [], nextMarks)) return note
+  return withMarks(
+    {
+      ...note,
+      content: nextContent,
+      title: note.customTitle ? note.title : deriveTitle(nextContent),
+      updatedAt: now,
+    },
+    nextMarks
+  )
 }
 
 export function updateNoteTitle(note: Note, title: string, now = Date.now()): Note {

@@ -1,79 +1,62 @@
 #!/usr/bin/env python3
-"""Generate the Keep Notes icon set (no external dependencies required)."""
+"""Generate the Keep Notes icon set from the source artwork in assets/icon-source.png."""
 
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parent.parent
+SOURCE = ROOT / "assets" / "icon-source.png"
 OUT = ROOT / "public" / "icons"
-SCALE = 8
 SIZES = (16, 32, 48, 128)
 
+# Below this size the "Keep Notes" lettering is illegible, so only the sticky note is used.
+FULL_ART_MIN_SIZE = 96
+# Square crop around the sticky note in source pixels (left, top, side).
+NOTE_CROP = (290, 160, 640)
+NOTE_RADIUS = 0.22
+WHITE_THRESHOLD = 247
 
-def lerp(a, b, t):
-    return tuple(round(a[i] + (b[i] - a[i]) * t) for i in range(3))
+
+def cut_out_background(img):
+    """Make the white page around the rounded tile transparent and crop to the tile."""
+    r, g, b = img.split()
+    darkest = ImageChops.darker(ImageChops.darker(r, g), b)
+    regions = darkest.point(lambda v: 255 if v >= WHITE_THRESHOLD else 0)
+    # Flood only the outer white so white highlights inside the art stay opaque.
+    for corner in ((0, 0), (img.width - 1, 0), (0, img.height - 1), (img.width - 1, img.height - 1)):
+        if regions.getpixel(corner) == 255:
+            ImageDraw.floodfill(regions, corner, 128)
+    mask = regions.point(lambda v: 0 if v == 128 else 255)
+    mask = mask.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(1))
+
+    tile = img.convert("RGBA")
+    tile.putalpha(mask)
+    left, top, right, bottom = mask.getbbox()
+    side = max(right - left, bottom - top)
+    square = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    square.paste(tile.crop((left, top, right, bottom)), ((side - (right - left)) // 2, (side - (bottom - top)) // 2))
+    return square
 
 
-def rounded(draw, box, radius, fill):
-    draw.rounded_rectangle(box, radius=radius, fill=fill)
-
-
-def make_icon(size):
-    canvas = size * SCALE
-    img = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-
-    # Vertical gradient background clipped to a rounded square.
-    bg = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
-    bg_draw = ImageDraw.Draw(bg)
-    top = (99, 102, 241)
-    bottom = (124, 58, 237)
-    for y in range(canvas):
-        bg_draw.line([(0, y), (canvas, y)], fill=(*lerp(top, bottom, y / canvas), 255))
-    mask = Image.new("L", (canvas, canvas), 0)
-    ImageDraw.Draw(mask).rounded_rectangle(
-        (0, 0, canvas - 1, canvas - 1), radius=int(canvas * 0.24), fill=255
-    )
-    img.paste(bg, (0, 0), mask)
-    draw = ImageDraw.Draw(img)
-
-    # Note sheet.
-    pad = canvas * 0.22
-    note = (pad, pad * 0.9, canvas - pad, canvas - pad * 0.9)
-    rounded(draw, note, canvas * 0.075, (255, 255, 255, 255))
-
-    # Rule lines.
-    left = note[0] + canvas * 0.09
-    right = note[2] - canvas * 0.09
-    line_h = max(1, int(canvas * 0.035))
-    for i, frac in enumerate((0.32, 0.5, 0.68)):
-        y = note[1] + (note[3] - note[1]) * frac
-        width = right - left if i < 2 else (right - left) * 0.62
-        rounded(
-            draw,
-            (left, y, left + width, y + line_h),
-            line_h / 2,
-            (99, 102, 241, 235),
-        )
-
-    # Small accent tab for a sticky-note feel.
-    tab_w = (right - left) * 0.3
-    tab_h = canvas * 0.055
-    rounded(
-        draw,
-        (left, note[3] - canvas * 0.13, left + tab_w, note[3] - canvas * 0.13 + tab_h),
-        tab_h / 2,
-        (245, 158, 11, 255),
-    )
-
-    return img.resize((size, size), Image.LANCZOS)
+def note_mark(img):
+    """Crop the sticky note onto its own rounded tile for small icon sizes."""
+    left, top, side = NOTE_CROP
+    mark = img.crop((left, top, left + side, top + side)).convert("RGBA")
+    mask = Image.new("L", (side, side), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, side - 1, side - 1), radius=int(side * NOTE_RADIUS), fill=255)
+    mark.putalpha(mask)
+    return mark
 
 
 def main():
+    source = Image.open(SOURCE).convert("RGB")
+    full = cut_out_background(source)
+    mark = note_mark(source)
     OUT.mkdir(parents=True, exist_ok=True)
     for size in SIZES:
-        make_icon(size).save(OUT / f"icon{size}.png")
+        art = full if size >= FULL_ART_MIN_SIZE else mark
+        art.resize((size, size), Image.LANCZOS).save(OUT / f"icon{size}.png", optimize=True)
     print(f"Wrote icons for {', '.join(f'{s}px' for s in SIZES)} to {OUT}")
 
 

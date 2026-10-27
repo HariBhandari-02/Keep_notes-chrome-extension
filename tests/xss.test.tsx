@@ -82,9 +82,9 @@ describe('untrusted note rendering', () => {
     )
 
     const title = screen.getByRole('textbox', { name: 'Note title' }) as HTMLInputElement
-    const content = screen.getByRole('textbox', { name: 'Note content' }) as HTMLTextAreaElement
+    const content = screen.getByRole('textbox', { name: 'Note content' }) 
     expect(title.value).toBe(payload)
-    expect(content.value).toBe(payload)
+    expect(content.textContent).toBe(payload)
     expectNoInjectedMarkup(container)
     expect((window as unknown as Record<string, unknown>).__xss).toBe(0)
   })
@@ -97,7 +97,7 @@ describe('untrusted note rendering', () => {
     const { container } = render(<App getPageSelection={() => ''} />)
 
     const content = await screen.findByRole('textbox', { name: 'Note content' })
-    await waitFor(() => expect((content as HTMLTextAreaElement).value).toBe(payload))
+    await waitFor(() => expect(content.textContent).toBe(payload))
     expectNoInjectedMarkup(container)
     expect((window as unknown as Record<string, unknown>).__xss).toBe(0)
   })

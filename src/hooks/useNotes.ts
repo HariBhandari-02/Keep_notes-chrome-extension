@@ -12,6 +12,7 @@ import {
   DEFAULT_SETTINGS,
   type KeepNotesSettings,
   type Note,
+  type NoteMark,
   type PanelPosition,
   type PanelSize,
   type SaveState,
@@ -143,6 +144,8 @@ export interface UseNotesResult {
   loading: boolean
   loadError: string | null
   reload: () => Promise<void>
+  refreshing: boolean
+  refresh: () => Promise<boolean>
   notes: Note[]
   selectedNote: Note | null
   selectedId: string | null
@@ -152,7 +155,7 @@ export interface UseNotesResult {
   createNote: () => string | null
   deleteNote: (id: string) => Promise<void>
   selectNote: (id: string) => void
-  updateContent: (id: string, content: string) => void
+  updateContent: (id: string, content: string, marks?: NoteMark[]) => void
   updateTitle: (id: string, title: string) => void
   setTheme: (theme: ThemeMode) => void
   setMinimized: (minimized: boolean) => void
@@ -171,6 +174,7 @@ export function useNotes(): UseNotesResult {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saveState, setSaveState] = useState<SaveState>('saved')
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   const notesRef = useRef<Record<string, Note>>({})
   const selectedIdRef = useRef<string | null>(null)
@@ -182,6 +186,7 @@ export function useNotes(): UseNotesResult {
   const errorRef = useRef<string | null>(null)
   const lastCreateAt = useRef(0)
   const loadRun = useRef(0)
+  const refreshInFlight = useRef<Promise<boolean> | null>(null)
 
   const replaceNotes = useCallback((next: Record<string, Note>) => {
     notesRef.current = next
@@ -329,8 +334,8 @@ export function useNotes(): UseNotesResult {
   )
 
   const updateContent = useCallback(
-    (id: string, content: string) => {
-      mutateNote(id, (note) => updateNoteContent(note, content))
+    (id: string, content: string, marks?: NoteMark[]) => {
+      mutateNote(id, (note) => updateNoteContent(note, content, marks))
     },
     [mutateNote]
   )
@@ -465,17 +470,8 @@ export function useNotes(): UseNotesResult {
     if (!errorRef.current && dirty.current.size === 0) setSaveState('saved')
   }, [flushAll])
 
-  useEffect(() => {
-    if (!ready) return
-
-    return subscribeToStorage(({ changed, removedIds }, nextSettings) => {
-      const currentSettings = settingsRef.current
-      if (nextSettings && nextSettings.theme !== currentSettings.theme) {
-        const next = { ...currentSettings, theme: nextSettings.theme }
-        settingsRef.current = next
-        setSettings(next)
-      }
-
+  const applyStoredNotes = useCallback(
+    (changed: Note[], removedIds: string[]) => {
       if (changed.length === 0 && removedIds.length === 0) return
 
       const merged = mergeStoredNotes(
@@ -497,8 +493,55 @@ export function useNotes(): UseNotesResult {
         const fallback = sortNotes(Object.values(merged.notes))[0]?.id ?? null
         applySelection(fallback)
       }
+    },
+    [applySelection, replaceNotes]
+  )
+
+  /**
+   * Pulls notes written by other tabs without resetting this tab's selection,
+   * panel settings, or unsaved edits.
+   */
+  const refresh = useCallback(() => {
+    if (refreshInFlight.current) return refreshInFlight.current
+
+    const run = (async () => {
+      setRefreshing(true)
+      try {
+        const stored = await loadAllNotes()
+        const storedIds = new Set(stored.map((note) => note.id))
+        const removedIds = Object.keys(notesRef.current).filter((id) => !storedIds.has(id))
+        applyStoredNotes(stored, removedIds)
+        return true
+      } catch (error) {
+        console.warn(
+          'Keep Notes could not refresh notes:',
+          error instanceof Error ? error.message : 'unknown storage error'
+        )
+        return false
+      } finally {
+        refreshInFlight.current = null
+        setRefreshing(false)
+      }
+    })()
+
+    refreshInFlight.current = run
+    return run
+  }, [applyStoredNotes])
+
+  useEffect(() => {
+    if (!ready) return
+
+    return subscribeToStorage(({ changed, removedIds }, nextSettings) => {
+      const currentSettings = settingsRef.current
+      if (nextSettings && nextSettings.theme !== currentSettings.theme) {
+        const next = { ...currentSettings, theme: nextSettings.theme }
+        settingsRef.current = next
+        setSettings(next)
+      }
+
+      applyStoredNotes(changed, removedIds)
     })
-  }, [applySelection, ready, replaceNotes])
+  }, [applyStoredNotes, ready])
 
   useEffect(() => {
     return () => {
@@ -516,6 +559,8 @@ export function useNotes(): UseNotesResult {
     loading,
     loadError,
     reload: load,
+    refreshing,
+    refresh,
     notes,
     selectedNote,
     selectedId,
