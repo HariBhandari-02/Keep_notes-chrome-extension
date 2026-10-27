@@ -10,3 +10,4 @@ sonar/
 *.crx
 *.pem
 .env
+.scannerwork
