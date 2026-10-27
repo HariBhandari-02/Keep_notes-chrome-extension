@@ -127,9 +127,9 @@ export function NoteEditor({
             onMouseDown={(event) => event.preventDefault()}
             onClick={handleAddSelection}
             title="Add the current page text selection to this note"
-            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-2 focus-visible:ring-indigo-500/70 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-600 outline-none transition-colors hover:border-indigo-300 hover:bg-indigo-100 hover:text-indigo-700 active:bg-indigo-200 focus-visible:ring-2 focus-visible:ring-indigo-500/70 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:border-indigo-400/50 dark:hover:bg-indigo-500/20 dark:hover:text-indigo-200"
           >
-            <ClipboardPlus size={11.5} strokeWidth={2.2} aria-hidden="true" />
+            <ClipboardPlus size={12.5} strokeWidth={2.2} aria-hidden="true" />
             Add selected text
           </button>
         </div>

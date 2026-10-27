@@ -35,8 +35,9 @@ export function PanelHeader({
       style={{ touchAction: 'none' }}
     >
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-sm">
-          <StickyNote size={15} strokeWidth={2.2} aria-hidden="true" />
+        {/* Explicit gradient with a solid fallback: Tailwind's variable-based gradient renders blank in the shadow root. */}
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] bg-indigo-600 bg-[linear-gradient(135deg,#6366f1,#7c3aed)] text-white shadow-sm ring-1 ring-inset ring-white/15">
+          <StickyNote size={16} strokeWidth={2.3} aria-hidden="true" />
         </div>
         <span className="truncate text-[13px] font-semibold tracking-[-0.01em] text-neutral-800 dark:text-neutral-100">
           Keep Notes
