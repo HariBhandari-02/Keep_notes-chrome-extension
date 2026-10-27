@@ -121,7 +121,7 @@ describe('normalizeNote', () => {
 describe('title updates', () => {
   it('updates an automatic title when content changes', () => {
     const initial = note({ content: 'First thought' , title: 'First thought' })
-    const updated = updateNoteContent(initial, 'A better first line', 5)
+    const updated = updateNoteContent(initial, 'A better first line', [], 5)
     expect(updated.title).toBe('A better first line')
     expect(updated.content).toBe('A better first line')
     expect(updated.updatedAt).toBe(5)
@@ -129,7 +129,7 @@ describe('title updates', () => {
 
   it('does not overwrite a custom title when content changes', () => {
     const initial = note({ title: 'Pinned title', customTitle: true, content: 'old' })
-    const updated = updateNoteContent(initial, 'new content', 5)
+    const updated = updateNoteContent(initial, 'new content', [], 5)
     expect(updated.title).toBe('Pinned title')
     expect(updated.customTitle).toBe(true)
   })
@@ -260,5 +260,51 @@ describe('helpers', () => {
 
     expect(formatRelativeTime(old, now).length).toBeGreaterThan(0)
     spy.mockRestore()
+  })
+})
+
+describe('note formatting marks', () => {
+  it('normalizes stored marks and omits them when there are none', () => {
+    const formatted = normalizeNote({
+      ...note({ content: 'Bold text' }),
+      marks: [
+        { type: 'bold', start: 0, end: 4 },
+        { type: 'script', start: 0, end: 4 },
+        { type: 'italic', start: 5, end: 500 },
+      ],
+    })
+    expect(formatted?.marks).toEqual([
+      { type: 'bold', start: 0, end: 4 },
+      { type: 'italic', start: 5, end: 9 },
+    ])
+
+    const plain = normalizeNote({ ...note({ content: 'Plain' }), marks: 'nope' })
+    expect(plain).not.toHaveProperty('marks')
+  })
+
+  it('replaces marks when the editor provides them', () => {
+    const original = note({ content: 'abc' })
+    const updated = updateNoteContent(original, 'abc', [{ type: 'underline', start: 1, end: 3 }], 7)
+    expect(updated).not.toBe(original)
+    expect(updated.marks).toEqual([{ type: 'underline', start: 1, end: 3 }])
+    expect(updated.updatedAt).toBe(7)
+  })
+
+  it('keeps existing marks when only the content changes', () => {
+    const original = note({ content: 'abc', marks: [{ type: 'bold', start: 0, end: 3 }] })
+    const updated = updateNoteContent(original, 'abc\n\nappended')
+    expect(updated.marks).toEqual([{ type: 'bold', start: 0, end: 3 }])
+  })
+
+  it('returns the same note when content and marks are unchanged', () => {
+    const original = note({ content: 'abc', marks: [{ type: 'bold', start: 0, end: 3 }] })
+    expect(updateNoteContent(original, 'abc', [{ type: 'bold', start: 0, end: 3 }])).toBe(original)
+  })
+
+  it('drops the marks property when formatting is removed', () => {
+    const original = note({ content: 'abc', marks: [{ type: 'bold', start: 0, end: 3 }] })
+    const updated = updateNoteContent(original, 'abc', [])
+    expect(updated).not.toHaveProperty('marks')
+    expect(updated.content).toBe('abc')
   })
 })

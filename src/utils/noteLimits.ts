@@ -4,6 +4,7 @@
  */
 export const MAX_NOTE_CONTENT_LENGTH = 100_000
 export const MAX_NOTE_TITLE_LENGTH = 200
+export const MAX_NOTE_MARKS = 2_000
 export const MAX_NOTE_ID_LENGTH = 128
 export const MAX_PAGE_SELECTION_LENGTH = 50_000
 export const MAX_SEARCH_QUERY_LENGTH = 200

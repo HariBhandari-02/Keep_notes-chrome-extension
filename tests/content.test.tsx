@@ -178,6 +178,18 @@ describe('content script', () => {
     }
   })
 
+  it('removes the panel once the extension is removed or reloaded', async () => {
+    await loadContentScript()
+    expect(document.getElementById(ROOT_ID)).not.toBeNull()
+
+    const runtime = (globalThis.chrome as unknown as { runtime: { id?: string } }).runtime
+    delete runtime.id
+    window.dispatchEvent(new Event('focus'))
+
+    expect(document.getElementById(ROOT_ID)).toBeNull()
+    expect((window as unknown as Record<string, unknown>).__keepNotesContentLoaded).toBe(false)
+  })
+
   it('mounts without chrome available', async () => {
     const { onMessage } = await loadContentScript(false)
     await new Promise((resolve) => setTimeout(resolve, 0))

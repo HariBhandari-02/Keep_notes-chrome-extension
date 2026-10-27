@@ -44,7 +44,7 @@ describe('Keep Notes panel', () => {
 
     await user.click(content)
     await user.type(content, 'My first note{enter}Body text about Chrome extensions')
-    expect((content as HTMLTextAreaElement).value).toContain('Chrome extensions')
+    expect(content.textContent).toContain('Chrome extensions')
 
     const title = screen.getByRole('textbox', { name: 'Note title' }) as HTMLInputElement
     await waitFor(() => expect(title.value).toBe('My first note'))
@@ -81,7 +81,7 @@ describe('Keep Notes panel', () => {
     await user.click(screen.getByText('Project ideas'))
 
     const reopenedContent = await screen.findByRole('textbox', { name: 'Note content' })
-    expect((reopenedContent as HTMLTextAreaElement).value).toContain('Body text')
+    expect(reopenedContent.textContent).toContain('Body text')
 
     await user.click(screen.getByRole('button', { name: 'Show notes list' }))
     await user.click(screen.getByRole('button', { name: 'Delete note' }))
@@ -134,7 +134,7 @@ describe('Keep Notes panel', () => {
     render(<App getPageSelection={() => ''} />)
 
     const content = await screen.findByRole('textbox', { name: 'Note content' })
-    expect((content as HTMLTextAreaElement).value).toBe(existing.content)
+    expect(content.textContent).toBe(existing.content)
 
     const title = screen.getByRole('textbox', { name: 'Note title' }) as HTMLInputElement
     expect(title.value).toBe('Saved title')
@@ -203,6 +203,35 @@ describe('Keep Notes panel', () => {
     ;(document.activeElement as HTMLElement | null)?.blur()
     fireEvent.keyDown(document.body, { key: 'Escape' })
     await waitFor(() => expect(panelBus.getSnapshot().visible).toBe(false))
+  })
+
+  it('refreshes notes added in other tabs from the header', async () => {
+    const fake = installFakeChrome()
+    const user = userEvent.setup()
+    const now = Date.now()
+
+    render(<App getPageSelection={() => ''} />)
+    await screen.findByRole('button', { name: 'Create your first note' })
+
+    fake.data[`${NOTE_KEY_PREFIX}other-tab`] = {
+      id: 'other-tab',
+      title: 'From another tab',
+      customTitle: true,
+      content: 'Written somewhere else.',
+      createdAt: now - 1000,
+      updatedAt: now - 500,
+    }
+
+    await user.click(screen.getByRole('button', { name: 'Refresh notes' }))
+    expect(await screen.findByText('Notes refreshed')).toBeTruthy()
+
+    await user.click(screen.getByRole('button', { name: 'Show notes list' }))
+    expect(await screen.findByText('From another tab')).toBeTruthy()
+
+    fake.get.mockRejectedValueOnce(new Error('read failed'))
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    await user.click(screen.getByRole('button', { name: 'Refresh notes' }))
+    expect(await screen.findByText('Could not refresh notes')).toBeTruthy()
   })
 
   it('shows load errors and retries loading', async () => {

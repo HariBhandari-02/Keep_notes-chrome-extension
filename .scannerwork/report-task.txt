@@ -1,0 +1,6 @@
+projectKey=keep_notes
+serverUrl=http://localhost:9002
+serverVersion=26.5.0.122743
+dashboardUrl=http://localhost:9002/dashboard?id=keep_notes
+ceTaskId=fcf1ecbd-5736-402d-8180-dab20fdaf5a4
+ceTaskUrl=http://localhost:9002/api/ce/task?id=fcf1ecbd-5736-402d-8180-dab20fdaf5a4

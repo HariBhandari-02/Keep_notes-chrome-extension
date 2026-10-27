@@ -131,6 +131,71 @@ describe('useNotes', () => {
     expect(result.current.selectedId).toBe('second')
   })
 
+  it('refreshes notes from other tabs while keeping selection and local edits', async () => {
+    const first = makeNote({ id: 'first', updatedAt: 10 })
+    const second = makeNote({ id: 'second', updatedAt: 20 })
+    const gone = makeNote({ id: 'gone', updatedAt: 5 })
+    const { result, fake } = setup((chrome) => {
+      chrome.data[`${NOTE_KEY_PREFIX}first`] = first
+      chrome.data[`${NOTE_KEY_PREFIX}second`] = second
+      chrome.data[`${NOTE_KEY_PREFIX}gone`] = gone
+      chrome.data[SETTINGS_KEY] = { theme: 'light', selectedNoteId: 'first' }
+    })
+
+    await waitFor(() => expect(result.current.ready).toBe(true))
+    act(() => {
+      result.current.updateContent('first', 'Local edit')
+    })
+
+    fake.data[`${NOTE_KEY_PREFIX}first`] = { ...first, content: 'Remote edit', updatedAt: 99 }
+    fake.data[`${NOTE_KEY_PREFIX}second`] = { ...second, content: 'Remote update', updatedAt: 30 }
+    fake.data[`${NOTE_KEY_PREFIX}third`] = makeNote({ id: 'third', updatedAt: 40 })
+    fake.data[SETTINGS_KEY] = { theme: 'light', selectedNoteId: 'third' }
+    delete fake.data[`${NOTE_KEY_PREFIX}gone`]
+
+    let ok = false
+    await act(async () => {
+      ok = await result.current.refresh()
+    })
+
+    expect(ok).toBe(true)
+    expect(result.current.refreshing).toBe(false)
+    expect(result.current.selectedId).toBe('first')
+    const byId = new Map(result.current.notes.map((note) => [note.id, note]))
+    expect(byId.get('first')?.content).toBe('Local edit')
+    expect(byId.get('second')?.content).toBe('Remote update')
+    expect(byId.has('third')).toBe(true)
+    expect(byId.has('gone')).toBe(false)
+  })
+
+  it('reports refresh failures and selects a fallback when the selected note is gone', async () => {
+    const { result, fake } = setup((chrome) => {
+      chrome.data[`${NOTE_KEY_PREFIX}first`] = makeNote({ id: 'first', updatedAt: 10 })
+      chrome.data[`${NOTE_KEY_PREFIX}second`] = makeNote({ id: 'second', updatedAt: 20 })
+      chrome.data[SETTINGS_KEY] = { theme: 'light', selectedNoteId: 'first' }
+    })
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    await waitFor(() => expect(result.current.ready).toBe(true))
+
+    fake.get.mockRejectedValueOnce(new Error('read failed'))
+    let ok = true
+    await act(async () => {
+      ok = await result.current.refresh()
+    })
+    expect(ok).toBe(false)
+    expect(result.current.notes).toHaveLength(2)
+
+    delete fake.data[`${NOTE_KEY_PREFIX}first`]
+    await act(async () => {
+      const [a, b] = [result.current.refresh(), result.current.refresh()]
+      expect(a).toBe(b)
+      await a
+    })
+    expect(result.current.notes.map((note) => note.id)).toEqual(['second'])
+    expect(result.current.selectedId).toBe('second')
+  })
+
   it('reports load failures and reloads successfully', async () => {
     const { result, fake } = setup((chrome) => {
       chrome.get.mockRejectedValue(new Error('read failed'))

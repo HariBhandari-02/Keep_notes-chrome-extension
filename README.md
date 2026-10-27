@@ -8,6 +8,7 @@ Keep Notes is a small, local-first floating notepad for Chrome. Click the toolba
 - **Draggable, resizable window** — drag from the header and resize from any edge or corner. The panel stays inside the viewport and remembers both its position and size.
 - **Multiple notes** — create, switch, search, and delete notes with a confirmation step.
 - **Automatic saving** — debounced writes to `chrome.storage.local` with clear `Saving…`, `Saved`, and `Unable to save` states.
+- **Bold, italic, and underline** — format selected text or toggle a style before typing, from the toolbar above the note body or with `Ctrl/Cmd+B`, `Ctrl/Cmd+I`, and `Ctrl/Cmd+U`. Content is stored as plain text plus formatting ranges, so pasted page markup never enters a note.
 - **Automatic titles** — a title is derived from the first meaningful line until you type your own. Clearing a custom title resumes automatic titles.
 - **Search** — case-insensitive filtering across note titles and content.
 - **Light, dark, and system themes** — follows the system by default and remembers your choice.
@@ -208,6 +209,8 @@ The suite covers:
 
 ```text
 .
+├── assets/
+│   └── icon-source.png         # master artwork for the extension icons
 ├── public/
 │   ├── manifest.json
 │   └── icons/                  # 16, 32, 48, 128 px PNGs
@@ -252,7 +255,7 @@ The content bundle imports the compiled Tailwind CSS as an inline string and ins
 
 ## Icon regeneration (optional)
 
-The PNG icons are committed. To regenerate them:
+The PNG icons are committed and generated from `assets/icon-source.png`. The 128 px icon uses the full artwork; 16, 32 and 48 px use just the sticky note, since the lettering is unreadable at those sizes. The panel header shows the same note as an inline SVG ([src/components/BrandMark.tsx](src/components/BrandMark.tsx)), so update it too if the artwork changes. To regenerate the PNGs:
 
 ```bash
 python3 -m pip install pillow

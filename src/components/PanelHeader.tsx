@@ -1,15 +1,18 @@
-import { ChevronUp, Minus, NotebookText, Plus, StickyNote, X } from 'lucide-react'
+import { ChevronUp, Minus, NotebookText, Plus, RefreshCw, X } from 'lucide-react'
 import type { HeaderDragProps } from '../hooks/useDraggable'
 import type { PanelView } from '../types/note'
 import { cx } from '../utils/cx'
+import { BrandMark } from './BrandMark'
 import { IconButton } from './IconButton'
 
 interface PanelHeaderProps {
   view: PanelView
   minimized: boolean
   isDragging: boolean
+  refreshing: boolean
   dragProps: HeaderDragProps
   onToggleView: () => void
+  onRefresh: () => void
   onNewNote: () => void
   onToggleMinimize: () => void
   onClose: () => void
@@ -19,8 +22,10 @@ export function PanelHeader({
   view,
   minimized,
   isDragging,
+  refreshing,
   dragProps,
   onToggleView,
+  onRefresh,
   onNewNote,
   onToggleMinimize,
   onClose,
@@ -35,10 +40,7 @@ export function PanelHeader({
       style={{ touchAction: 'none' }}
     >
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
-        {/* Explicit gradient with a solid fallback: Tailwind's variable-based gradient renders blank in the shadow root. */}
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] bg-indigo-600 bg-[linear-gradient(135deg,#6366f1,#7c3aed)] text-white shadow-sm ring-1 ring-inset ring-white/15">
-          <StickyNote size={16} strokeWidth={2.3} aria-hidden="true" />
-        </div>
+        <BrandMark />
         <span className="truncate text-[13px] font-semibold tracking-[-0.01em] text-neutral-800 dark:text-neutral-100">
           Keep Notes
         </span>
@@ -52,6 +54,23 @@ export function PanelHeader({
             active={view === 'list'}
           >
             <NotebookText size={16} strokeWidth={2} aria-hidden="true" />
+          </IconButton>
+        )}
+
+        {!minimized && (
+          <IconButton
+            label="Refresh notes"
+            title="Refresh notes from other tabs"
+            onClick={onRefresh}
+            disabled={refreshing}
+            aria-busy={refreshing || undefined}
+          >
+            <RefreshCw
+              size={15}
+              strokeWidth={2.1}
+              className={cx(refreshing && 'animate-spin')}
+              aria-hidden="true"
+            />
           </IconButton>
         )}
 

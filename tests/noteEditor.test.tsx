@@ -99,10 +99,10 @@ describe('NoteEditor', () => {
     expect(onChangeContent).not.toHaveBeenCalled()
   })
 
-  it('focuses the textarea when the focus signal changes', async () => {
+  it('focuses the body editor when the focus signal changes', async () => {
     const { element, rerender } = renderEditor({ focusSignal: 0 })
-    const textarea = screen.getByRole('textbox', { name: 'Note content' })
-    const focus = vi.spyOn(textarea, 'focus')
+    const body = screen.getByRole('textbox', { name: 'Note content' })
+    const focus = vi.spyOn(body, 'focus')
 
     rerender(element(1))
 
@@ -110,12 +110,41 @@ describe('NoteEditor', () => {
   })
 
   it('bounds the title and content inputs with explicit limits', () => {
-    renderEditor()
+    const onNotice = vi.fn()
+    renderEditor({ note: makeNote({ content: 'a'.repeat(MAX_NOTE_CONTENT_LENGTH) }), onNotice })
 
     const title = screen.getByRole('textbox', { name: 'Note title' }) as HTMLInputElement
-    const content = screen.getByRole('textbox', { name: 'Note content' }) as HTMLTextAreaElement
     expect(title.maxLength).toBe(MAX_NOTE_TITLE_LENGTH)
-    expect(content.maxLength).toBe(MAX_NOTE_CONTENT_LENGTH)
+
+    const content = screen.getByRole('textbox', { name: 'Note content' })
+    const typing = new InputEvent('beforeinput', {
+      inputType: 'insertText',
+      data: 'b',
+      cancelable: true,
+    })
+    content.dispatchEvent(typing)
+    expect(typing.defaultPrevented).toBe(true)
+    expect(onNotice).toHaveBeenCalledWith('This note is at its maximum length.')
+
+    const deleting = new InputEvent('beforeinput', {
+      inputType: 'deleteContentBackward',
+      cancelable: true,
+    })
+    content.dispatchEvent(deleting)
+    expect(deleting.defaultPrevented).toBe(false)
+  })
+
+  it('separates the title from a formatted body', () => {
+    renderEditor({
+      note: makeNote({
+        content: 'Bold and plain',
+        marks: [{ type: 'bold', start: 0, end: 4 }],
+      }),
+    })
+
+    const content = screen.getByRole('textbox', { name: 'Note content' })
+    expect(content.querySelector('b')?.textContent).toBe('Bold')
+    expect(screen.getByRole('toolbar', { name: 'Text formatting' })).toBeTruthy()
   })
 
   it('truncates an oversized page selection instead of exceeding the note limit', () => {

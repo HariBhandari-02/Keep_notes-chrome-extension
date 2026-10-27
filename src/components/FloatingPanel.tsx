@@ -162,7 +162,8 @@ function usePanelKeydown({
         origin instanceof HTMLElement &&
         (origin.tagName === 'INPUT' ||
           origin.tagName === 'TEXTAREA' ||
-          origin.isContentEditable)
+          origin.isContentEditable ||
+          origin.hasAttribute('contenteditable'))
       ) {
         event.preventDefault()
         origin.blur()
@@ -222,6 +223,8 @@ export function FloatingPanel({
     retrySave,
     flushAll,
     reload,
+    refreshing,
+    refresh,
   } = store
 
   const [view, setView] = useState<PanelView>('editor')
@@ -427,6 +430,12 @@ export function FloatingPanel({
     onClose()
   }, [flushAll, onClose, setMinimized])
 
+  const handleRefresh = useCallback(() => {
+    void refresh().then((ok) => {
+      showToast(ok ? 'Notes refreshed' : 'Could not refresh notes')
+    })
+  }, [refresh, showToast])
+
   const handleConfirmDelete = useCallback(
     (id: string) => {
       setConfirmDeleteId(null)
@@ -483,7 +492,7 @@ export function FloatingPanel({
         note={selectedNote}
         focusSignal={editorFocusSignal}
         getPageSelection={getPageSelection}
-        onChangeContent={(content) => updateContent(selectedNote.id, content)}
+        onChangeContent={(content, marks) => updateContent(selectedNote.id, content, marks)}
         onChangeTitle={(title) => updateTitle(selectedNote.id, title)}
         onNotice={showToast}
       />
@@ -534,7 +543,7 @@ export function FloatingPanel({
         top: position.y,
       }}
       className={cx(
-        'keep-notes-panel fixed z-[2147483647] flex animate-keep-notes-in flex-col overflow-hidden rounded-[14px] border border-neutral-200/80 bg-white text-neutral-900 shadow-[0_24px_64px_-20px_rgba(15,23,42,0.5)] outline-none dark:border-neutral-700/70 dark:bg-neutral-900 dark:text-neutral-100',
+        'keep-notes-panel keep-notes-glass fixed z-[2147483647] flex animate-keep-notes-in flex-col overflow-hidden rounded-[14px] border text-neutral-900 outline-none dark:text-neutral-100',
         isDragging && 'select-none',
         isResizing && 'select-none'
       )}
@@ -543,8 +552,10 @@ export function FloatingPanel({
         view={view}
         minimized={minimized}
         isDragging={isDragging}
+        refreshing={refreshing}
         dragProps={headerDragProps}
         onToggleView={handleToggleView}
+        onRefresh={handleRefresh}
         onNewNote={handleCreate}
         onToggleMinimize={handleToggleMinimize}
         onClose={handleClose}

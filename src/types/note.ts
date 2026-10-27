@@ -1,8 +1,20 @@
+export type NoteMarkType = 'bold' | 'italic' | 'underline'
+
+/** A formatting range over `Note.content`, as UTF-16 offsets `[start, end)`. */
+export interface NoteMark {
+  type: NoteMarkType
+  start: number
+  end: number
+}
+
 export interface Note {
   id: string
   title: string
   customTitle: boolean
+  /** Plain text; formatting lives in `marks` so titles, search, and previews stay text-only. */
   content: string
+  /** Omitted when the note has no formatting. */
+  marks?: NoteMark[]
   createdAt: number
   updatedAt: number
 }

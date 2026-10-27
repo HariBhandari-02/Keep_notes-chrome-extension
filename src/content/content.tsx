@@ -2,6 +2,8 @@ import { createRoot } from 'react-dom/client'
 import App from '../App'
 import styles from '../styles/globals.css?inline'
 import { MAX_PAGE_SELECTION_LENGTH } from '../utils/noteLimits'
+import { isExtensionContextValid, watchExtensionContext } from './extensionContext'
+import { isolatePanelEvents } from './isolateEvents'
 import { panelBus } from './panelBus'
 import { isTrustedPanelSender, parsePanelMessage } from './panelMessages'
 
@@ -101,10 +103,23 @@ function mount(): void {
   mountPoint.className = 'keep-notes-root'
   shadow.appendChild(mountPoint)
 
+  const releaseEvents = isolatePanelEvents(host, shadow)
   document.documentElement.appendChild(host)
 
-  createRoot(mountPoint).render(<App getPageSelection={getPageSelectionText} />)
+  const root = createRoot(mountPoint)
+  root.render(<App getPageSelection={getPageSelectionText} />)
   registerMessageHandler()
+
+  // Without a live extension (removed, disabled, or reloaded) the panel can no
+  // longer save, so take it off the page instead of leaving an orphan behind.
+  if (isExtensionContextValid()) {
+    watchExtensionContext(() => {
+      root.unmount()
+      releaseEvents()
+      host.remove()
+      window[CONTENT_FLAG] = false
+    })
+  }
 }
 
 if (document.documentElement) {

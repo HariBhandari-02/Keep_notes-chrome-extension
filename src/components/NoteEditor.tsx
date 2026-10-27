@@ -1,18 +1,21 @@
 import { ClipboardPlus } from 'lucide-react'
 import { useEffect, useRef, useState, type FocusEvent } from 'react'
-import type { Note } from '../types/note'
+import type { Note, NoteMark } from '../types/note'
 import { deriveTitleInputValue } from '../utils/generateTitle'
 import {
   MAX_NOTE_CONTENT_LENGTH,
   MAX_NOTE_TITLE_LENGTH,
 } from '../utils/noteLimits'
 import { formatRelativeTime } from '../utils/noteUtils'
+import { RichTextEditor, type RichTextEditorHandle } from './RichTextEditor'
+
+const NO_MARKS: NoteMark[] = []
 
 interface NoteEditorProps {
   note: Note
   focusSignal: number
   getPageSelection: () => string
-  onChangeContent: (content: string) => void
+  onChangeContent: (content: string, marks?: NoteMark[]) => void
   onChangeTitle: (title: string) => void
   onNotice: (message: string) => void
 }
@@ -28,7 +31,7 @@ export function NoteEditor({
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const titleRef = useRef<HTMLInputElement | null>(null)
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const bodyRef = useRef<RichTextEditorHandle | null>(null)
 
   const autoTitle = deriveTitleInputValue(note.content)
   let titleValue = autoTitle
@@ -46,11 +49,7 @@ export function NoteEditor({
 
   useEffect(() => {
     if (focusSignal <= 0) return
-    const textarea = textareaRef.current
-    if (!textarea) return
-    textarea.focus()
-    const end = textarea.value.length
-    textarea.setSelectionRange(end, end)
+    bodyRef.current?.focusEnd()
   }, [focusSignal])
 
   const handleTitleFocus = (event: FocusEvent<HTMLInputElement>) => {
@@ -95,17 +94,12 @@ export function NoteEditor({
     )
     setEditingTitle(false)
 
-    requestAnimationFrame(() => {
-      const textarea = textareaRef.current
-      if (!textarea) return
-      textarea.focus()
-      textarea.setSelectionRange(nextContent.length, nextContent.length)
-    })
+    requestAnimationFrame(() => bodyRef.current?.focusEnd())
   }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="px-4 pt-3">
+      <div className="mx-3 border-b border-neutral-300/80 px-1 pt-3 dark:border-white/15">
         <input
           ref={titleRef}
           type="text"
@@ -120,7 +114,7 @@ export function NoteEditor({
           className="w-full rounded-md border-0 bg-transparent px-0.5 text-[17px] font-semibold leading-6 tracking-[-0.015em] text-neutral-900 outline-none placeholder:font-medium placeholder:text-neutral-400 focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:text-neutral-50 dark:placeholder:text-neutral-500"
         />
 
-        <div className="mt-1 flex items-center justify-between gap-3 pb-2 text-[10.5px] text-neutral-400 dark:text-neutral-500">
+        <div className="mt-1 flex items-center justify-between gap-3 pb-2.5 text-[10.5px] text-neutral-400 dark:text-neutral-500">
           <span className="truncate">Edited {formatRelativeTime(note.updatedAt)}</span>
           <button
             type="button"
@@ -135,15 +129,15 @@ export function NoteEditor({
         </div>
       </div>
 
-      <textarea
-        ref={textareaRef}
-        value={note.content}
-        onChange={(event) => onChangeContent(event.target.value)}
+      <RichTextEditor
+        ref={bodyRef}
+        content={note.content}
+        marks={note.marks ?? NO_MARKS}
+        label="Note content"
         placeholder="Start writing…"
-        aria-label="Note content"
         maxLength={MAX_NOTE_CONTENT_LENGTH}
-        spellCheck
-        className="keep-notes-editor keep-notes-scroll min-h-0 flex-1 resize-none border-0 bg-transparent px-4 pb-3 pt-1 text-[13.5px] leading-[1.65] text-neutral-800 outline-none placeholder:text-neutral-400 dark:text-neutral-100 dark:placeholder:text-neutral-500"
+        onChange={onChangeContent}
+        onNotice={onNotice}
       />
     </div>
   )
