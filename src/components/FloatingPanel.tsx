@@ -20,7 +20,7 @@ import {
 import type { PanelState } from '../content/panelBus'
 import { useDraggable } from '../hooks/useDraggable'
 import type { UseNotesResult } from '../hooks/useNotes'
-import type { PanelPosition, PanelSize, PanelView } from '../types/note'
+import type { NoteFilter, PanelPosition, PanelSize, PanelView } from '../types/note'
 import { cx } from '../utils/cx'
 import { filterNotes } from '../utils/noteUtils'
 import {
@@ -216,6 +216,7 @@ export function FloatingPanel({
     selectNote,
     updateContent,
     updateTitle,
+    setPinned,
     setTheme,
     setMinimized,
     setPanelPosition,
@@ -229,6 +230,7 @@ export function FloatingPanel({
 
   const [view, setView] = useState<PanelView>('editor')
   const [query, setQuery] = useState('')
+  const [listFilter, setListFilter] = useState<NoteFilter>('all')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [editorFocusSignal, setEditorFocusSignal] = useState(0)
   const [toast, setToast] = useState<ToastState | null>(null)
@@ -293,7 +295,10 @@ export function FloatingPanel({
     panelRef.current = resizableRef.current?.resizable ?? null
   }, [])
 
-  const filteredNotes = useMemo(() => filterNotes(notes, query), [notes, query])
+  const filteredNotes = useMemo(() => {
+    const matches = filterNotes(notes, query)
+    return listFilter === 'pinned' ? matches.filter((note) => note.pinned === true) : matches
+  }, [listFilter, notes, query])
   const minimized = settings.panelMinimized
 
   const showToast = useCallback((text: string) => {
@@ -463,8 +468,10 @@ export function FloatingPanel({
     handleCancelDelete,
   })
 
-  const countSuffix = query ? ` of ${notes.length}` : ''
-  const noteCountLabel = `${filteredNotes.length}${countSuffix} ${
+  // The tab filter outlives the list view, so only narrow the count while the list is showing.
+  const listNarrowed = view === 'list' && (query.length > 0 || listFilter === 'pinned')
+  const countSuffix = listNarrowed ? ` of ${notes.length}` : ''
+  const noteCountLabel = `${listNarrowed ? filteredNotes.length : notes.length}${countSuffix} ${
     notes.length === 1 ? 'note' : 'notes'
   }`
 
@@ -475,10 +482,13 @@ export function FloatingPanel({
         notes={filteredNotes}
         totalCount={notes.length}
         query={query}
+        filter={listFilter}
         selectedId={selectedId}
         confirmDeleteId={confirmDeleteId}
         onQueryChange={setQuery}
+        onFilterChange={setListFilter}
         onSelect={handleSelect}
+        onTogglePin={setPinned}
         onRequestDelete={setConfirmDeleteId}
         onCancelDelete={handleCancelDelete}
         onConfirmDelete={handleConfirmDelete}

@@ -50,7 +50,15 @@ export function normalizeNote(raw: unknown, now = Date.now()): Note | null {
     createdAt,
     updatedAt,
   }
+  if (raw.pinned === true) note.pinned = true
   return withMarks(note, normalizeMarks(raw.marks, content.length))
+}
+
+/** Bumps `updatedAt` so other tabs accept the change when merging. */
+export function setNotePinned(note: Note, pinned: boolean, now = Date.now()): Note {
+  if ((note.pinned === true) === pinned) return note
+  const { pinned: _omitted, ...rest } = note
+  return pinned ? { ...rest, pinned: true, updatedAt: now } : { ...rest, updatedAt: now }
 }
 
 /** Omitting `marks` keeps the note's existing formatting, clamped to the new content. */
@@ -108,7 +116,9 @@ export function filterNotes(notes: Note[], query: string): Note[] {
 }
 
 export function sortNotes(notes: Note[]): Note[] {
-  return [...notes].sort((a, b) => b.updatedAt - a.updatedAt)
+  return [...notes].sort(
+    (a, b) => Number(b.pinned === true) - Number(a.pinned === true) || b.updatedAt - a.updatedAt
+  )
 }
 
 export function createBlankNote(now = Date.now()): Note {

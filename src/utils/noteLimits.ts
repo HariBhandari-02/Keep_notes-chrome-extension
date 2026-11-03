@@ -8,6 +8,7 @@ export const MAX_NOTE_MARKS = 2_000
 export const MAX_NOTE_ID_LENGTH = 128
 export const MAX_PAGE_SELECTION_LENGTH = 50_000
 export const MAX_SEARCH_QUERY_LENGTH = 200
+export const MAX_LINK_URL_LENGTH = 2_048
 export const MAX_PANEL_COORDINATE = 1_000_000
 export const MAX_PANEL_DIMENSION = 10_000
 export const MAX_TIMESTAMP = 8_640_000_000_000_000

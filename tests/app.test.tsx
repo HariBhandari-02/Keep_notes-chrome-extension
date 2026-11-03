@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../src/App'
@@ -84,7 +84,8 @@ describe('Keep Notes panel', () => {
     expect(reopenedContent.textContent).toContain('Body text')
 
     await user.click(screen.getByRole('button', { name: 'Show notes list' }))
-    await user.click(screen.getByRole('button', { name: 'Delete note' }))
+    await user.click(screen.getByRole('button', { name: 'Note actions' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Delete note' }))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(screen.getByText('No notes yet')).toBeTruthy())
@@ -194,7 +195,8 @@ describe('Keep Notes panel', () => {
     panelBus.open()
     await screen.findByRole('textbox', { name: 'Note content' })
     await user.click(screen.getByRole('button', { name: 'Show notes list' }))
-    await user.click(screen.getByRole('button', { name: /Delete note/ }))
+    await user.click(screen.getByRole('button', { name: 'Note actions' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Delete note' }))
     expect(screen.getByText('Delete this note?')).toBeTruthy()
 
     fireEvent.keyDown(screen.getByRole('button', { name: 'Cancel' }), { key: 'Escape' })
@@ -232,6 +234,121 @@ describe('Keep Notes panel', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     await user.click(screen.getByRole('button', { name: 'Refresh notes' }))
     expect(await screen.findByText('Could not refresh notes')).toBeTruthy()
+  })
+
+  it('pins notes from the note menu and groups them first', async () => {
+    const fake = installFakeChrome()
+    const user = userEvent.setup()
+    const now = Date.now()
+    fake.data[`${NOTE_KEY_PREFIX}older`] = {
+      id: 'older',
+      title: 'Older note',
+      customTitle: true,
+      content: 'Old content',
+      createdAt: now - 5000,
+      updatedAt: now - 5000,
+    }
+    fake.data[`${NOTE_KEY_PREFIX}newer`] = {
+      id: 'newer',
+      title: 'Newer note',
+      customTitle: true,
+      content: 'New content',
+      createdAt: now - 1000,
+      updatedAt: now - 1000,
+    }
+
+    render(<App getPageSelection={() => ''} />)
+    await screen.findByRole('textbox', { name: 'Note content' })
+    await user.click(screen.getByRole('button', { name: 'Show notes list' }))
+    expect(screen.queryByText(/Pinned \(/)).toBeNull()
+
+    const olderItem = screen.getByText('Older note').closest('li') as HTMLElement
+    await user.click(within(olderItem).getByRole('button', { name: 'Note actions' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Pin note' }))
+
+    const pinnedList = await screen.findByRole('list', { name: 'Pinned notes' })
+    expect(within(pinnedList).getByText('Older note')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Pinned (1)' })).toBeTruthy()
+    await waitFor(() =>
+      expect(storedNotes(fake.data).find((item) => item.id === 'older')?.pinned).toBe(true)
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Pinned (1)' }))
+    expect(screen.queryByRole('list', { name: 'Pinned notes' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Pinned (1)' }))
+
+    const pinnedItem = screen.getByText('Older note').closest('li') as HTMLElement
+    await user.click(within(pinnedItem).getByRole('button', { name: 'Note actions' }))
+    expect(screen.getByRole('menu', { name: 'Note actions' })).toBeTruthy()
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Unpin note' }), { key: 'Escape' })
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(panelBus.getSnapshot().visible).toBe(true)
+
+    await user.click(within(pinnedItem).getByRole('button', { name: 'Note actions' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Unpin note' }))
+    await waitFor(() => expect(screen.queryByRole('list', { name: 'Pinned notes' })).toBeNull())
+  })
+
+  it('filters the list to pinned notes with the Pinned tab', async () => {
+    const fake = installFakeChrome()
+    const user = userEvent.setup()
+    const now = Date.now()
+    fake.data[`${NOTE_KEY_PREFIX}older`] = {
+      id: 'older',
+      title: 'Older note',
+      customTitle: true,
+      content: 'Old content',
+      pinned: true,
+      createdAt: now - 5000,
+      updatedAt: now - 5000,
+    }
+    fake.data[`${NOTE_KEY_PREFIX}newer`] = {
+      id: 'newer',
+      title: 'Newer note',
+      customTitle: true,
+      content: 'New content',
+      createdAt: now - 1000,
+      updatedAt: now - 1000,
+    }
+
+    render(<App getPageSelection={() => ''} />)
+    await screen.findByRole('textbox', { name: 'Note content' })
+    await user.click(screen.getByRole('button', { name: 'Show notes list' }))
+
+    const allTab = screen.getByRole('tab', { name: 'All notes' })
+    const pinnedTab = screen.getByRole('tab', { name: 'Pinned notes' })
+    expect(allTab.getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Pinned (1)' })).toBeTruthy()
+    expect(screen.getByText('Newer note')).toBeTruthy()
+    expect(screen.getByText('2 notes')).toBeTruthy()
+
+    await user.click(pinnedTab)
+    expect(pinnedTab.getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tabpanel', { name: 'Pinned notes' })).toBeTruthy()
+    expect(within(screen.getByRole('list', { name: 'Pinned notes' })).getByText('Older note')).toBeTruthy()
+    expect(screen.queryByText('Newer note')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Pinned (1)' })).toBeNull()
+    expect(screen.getByText('1 of 2 notes')).toBeTruthy()
+
+    await user.type(screen.getByRole('searchbox', { name: 'Search notes' }), 'new')
+    expect(screen.getByText(/No pinned notes match/)).toBeTruthy()
+    await user.click(screen.getByText('Clear search'))
+
+    fireEvent.keyDown(pinnedTab, { key: 'ArrowLeft' })
+    expect(allTab.getAttribute('aria-selected')).toBe('true')
+    expect(document.activeElement).toBe(allTab)
+    expect(screen.getByText('Newer note')).toBeTruthy()
+
+    fireEvent.keyDown(allTab, { key: 'End' })
+    const pinnedItem = screen.getByText('Older note').closest('li') as HTMLElement
+    await user.click(within(pinnedItem).getByRole('button', { name: 'Note actions' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Unpin note' }))
+    expect(await screen.findByText('No pinned notes')).toBeTruthy()
+
+    await user.click(screen.getByRole('button', { name: 'Show all notes' }))
+    expect(allTab.getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByText('Older note')).toBeTruthy()
+    expect(screen.getByText('Newer note')).toBeTruthy()
   })
 
   it('shows load errors and retries loading', async () => {

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, createEvent, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react'
 import { createRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RichTextEditor, type RichTextEditorHandle } from '../src/components/RichTextEditor'
@@ -251,5 +251,135 @@ describe('RichTextEditor', () => {
 
     expect(() => fireEvent.keyDown(editor, { key: 'b', ctrlKey: true })).not.toThrow()
     expect(screen.getByRole('button', { name: 'Bold' }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  describe('list and heading lines', () => {
+    let calls: Array<[string, string | undefined, string]>
+
+    beforeEach(() => {
+      calls = []
+      execCommand = vi.fn((command: string, _showUI: boolean, value?: string) => {
+        calls.push([command, value, document.getSelection()?.toString() ?? ''])
+        return true
+      })
+      documentWithCommands.execCommand = execCommand
+    })
+
+    function placeCaret(node: Node, offset: number) {
+      const range = document.createRange()
+      range.setStart(node, offset)
+      range.collapse(true)
+      document.getSelection()?.removeAllRanges()
+      document.getSelection()?.addRange(range)
+    }
+
+    function renderAtEnd(props: EditorProps) {
+      const view = renderEditor(props)
+      view.editor.focus()
+      placeCaret(view.editor.lastChild!, (view.editor.lastChild as Text).length)
+      return view
+    }
+
+    it('turns "- " into a bullet and "1 " into a numbered item', () => {
+      const { editor } = renderAtEnd({ content: 'x\n-' })
+      expect(fireEvent.keyDown(editor, { key: ' ' })).toBe(false)
+      expect(calls).toEqual([['insertText', '• ', '-']])
+
+      calls = []
+      cleanup()
+      const numbered = renderAtEnd({ content: '1' })
+      expect(fireEvent.keyDown(numbered.editor, { key: ' ' })).toBe(false)
+      expect(calls).toEqual([['insertText', '1. ', '1']])
+    })
+
+    it('turns "# " into a heading line', () => {
+      const { editor } = renderAtEnd({ content: 'x\n#' })
+
+      expect(fireEvent.keyDown(editor, { key: ' ' })).toBe(false)
+      expect(calls).toEqual([
+        ['formatBlock', 'h3', ''],
+        ['delete', undefined, '#'],
+      ])
+    })
+
+    it('leaves a space typed anywhere else alone', () => {
+      const { editor } = renderAtEnd({ content: 'a-' })
+
+      expect(fireEvent.keyDown(editor, { key: ' ' })).toBe(true)
+      expect(fireEvent.keyDown(editor, { key: ' ', isComposing: true })).toBe(true)
+      expect(calls).toEqual([])
+    })
+
+    it('continues a list on Enter and ends it on Enter in an empty item', () => {
+      const { editor } = renderAtEnd({ content: '1. a' })
+      expect(fireEvent.keyDown(editor, { key: 'Enter' })).toBe(false)
+      expect(calls).toEqual([['insertText', '\n2. ', '']])
+
+      calls = []
+      cleanup()
+      const empty = renderAtEnd({ content: '• a\n• ' })
+      expect(fireEvent.keyDown(empty.editor, { key: 'Enter' })).toBe(false)
+      expect(calls).toEqual([['delete', undefined, '• ']])
+    })
+
+    it('keeps Shift+Enter and Enter outside a list as plain line breaks', () => {
+      const { editor } = renderAtEnd({ content: '• a' })
+      expect(fireEvent.keyDown(editor, { key: 'Enter', shiftKey: true })).toBe(true)
+
+      cleanup()
+      const plain = renderAtEnd({ content: 'text' })
+      expect(fireEvent.keyDown(plain.editor, { key: 'Enter' })).toBe(true)
+      expect(calls).toEqual([])
+    })
+
+    it('removes a list marker on Backspace right after it', () => {
+      const { editor } = renderEditor({ content: '1. a\n2. b' })
+      editor.focus()
+      placeCaret(editor.firstChild!, 8)
+
+      expect(fireEvent.keyDown(editor, { key: 'Backspace' })).toBe(false)
+      expect(calls).toEqual([['delete', undefined, '2. ']])
+
+      calls = []
+      placeCaret(editor.firstChild!, 9)
+      expect(fireEvent.keyDown(editor, { key: 'Backspace' })).toBe(true)
+      expect(calls).toEqual([])
+    })
+
+    it('makes a heading plain on Backspace at its start', () => {
+      const { editor } = renderEditor({
+        content: 'a\nTitle',
+        marks: [{ type: 'heading', start: 2, end: 7 }],
+      })
+      editor.focus()
+      const heading = editor.querySelector('h3')!.firstChild!
+
+      placeCaret(heading, 1)
+      expect(fireEvent.keyDown(editor, { key: 'Backspace' })).toBe(true)
+
+      placeCaret(heading, 0)
+      expect(fireEvent.keyDown(editor, { key: 'Backspace' })).toBe(false)
+      expect(calls).toEqual([['formatBlock', 'div', '']])
+    })
+
+    it('lets the key through and restores the caret when the edit fails', () => {
+      execCommand.mockReturnValue(false)
+      const { editor } = renderAtEnd({ content: '-' })
+
+      expect(fireEvent.keyDown(editor, { key: ' ' })).toBe(true)
+      const range = document.getSelection()?.getRangeAt(0)
+      expect(range?.collapsed).toBe(true)
+      expect(range?.startOffset).toBe(1)
+    })
+
+    it('does not grow a note that is at its maximum length', () => {
+      const { editor } = renderAtEnd({ content: '• a', maxLength: 3 })
+      expect(fireEvent.keyDown(editor, { key: 'Enter' })).toBe(true)
+
+      cleanup()
+      const numbered = renderAtEnd({ content: '1', maxLength: 2 })
+      expect(fireEvent.keyDown(numbered.editor, { key: ' ' })).toBe(true)
+      expect(calls).toEqual([])
+    })
   })
 })

@@ -4,7 +4,7 @@ import { cx } from '../utils/cx'
 interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'aria-label'> {
   label: string
   children: ReactNode
-  variant?: 'ghost' | 'accent' | 'danger'
+  variant?: 'ghost' | 'soft' | 'accent' | 'danger'
   size?: 'sm' | 'md'
   active?: boolean
 }
@@ -15,6 +15,8 @@ const BASE =
 const VARIANTS = {
   ghost:
     'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100',
+  soft:
+    'border border-neutral-200 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-neutral-100',
   accent:
     'bg-indigo-600 text-white shadow-sm hover:bg-indigo-500 active:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400',
   danger:

@@ -46,7 +46,7 @@ export function PanelHeader({
         </span>
       </div>
 
-      <div className="flex shrink-0 items-center gap-0.5">
+      <div className="flex shrink-0 items-center gap-1.5">
         {!minimized && (
           <IconButton
             label={view === 'list' ? 'Show note editor' : 'Show notes list'}
@@ -74,9 +74,11 @@ export function PanelHeader({
           </IconButton>
         )}
 
-        <IconButton label="New note" title="New note (Ctrl/Cmd + Enter)" variant="accent" onClick={onNewNote}>
-          <Plus size={17} strokeWidth={2.4} aria-hidden="true" />
+        <IconButton label="New note" title="New note (Ctrl/Cmd + Enter)" variant="soft" onClick={onNewNote}>
+          <Plus size={17} strokeWidth={2.2} aria-hidden="true" />
         </IconButton>
+
+        <span className="mx-0.5 h-5 w-px bg-neutral-200 dark:bg-neutral-700" aria-hidden="true" />
 
         <IconButton
           label={minimized ? 'Expand Keep Notes' : 'Minimize Keep Notes'}

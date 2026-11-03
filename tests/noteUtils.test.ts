@@ -12,6 +12,7 @@ import {
   filterNotes,
   formatRelativeTime,
   normalizeNote,
+  setNotePinned,
   sortNotes,
   updateNoteContent,
   updateNoteTitle,
@@ -224,6 +225,28 @@ describe('helpers', () => {
     const older = note({ id: 'older', updatedAt: 1 })
     const newer = note({ id: 'newer', updatedAt: 10 })
     expect(sortNotes([older, newer]).map((item) => item.id)).toEqual(['newer', 'older'])
+  })
+
+  it('sorts pinned notes before newer unpinned notes', () => {
+    const pinned = note({ id: 'pinned', updatedAt: 1, pinned: true })
+    const newer = note({ id: 'newer', updatedAt: 10 })
+    expect(sortNotes([newer, pinned]).map((item) => item.id)).toEqual(['pinned', 'newer'])
+  })
+
+  it('pins and unpins notes, omitting the flag when unpinned', () => {
+    const original = note()
+    const pinned = setNotePinned(original, true, 50)
+    expect(pinned).toMatchObject({ pinned: true, updatedAt: 50 })
+    expect(setNotePinned(pinned, true)).toBe(pinned)
+
+    const unpinned = setNotePinned(pinned, false, 60)
+    expect('pinned' in unpinned).toBe(false)
+    expect(unpinned.updatedAt).toBe(60)
+  })
+
+  it('keeps only a literal true pinned flag when normalizing', () => {
+    expect(normalizeNote({ id: 'a', content: '', pinned: true })?.pinned).toBe(true)
+    expect('pinned' in (normalizeNote({ id: 'a', content: '', pinned: 'yes' }) ?? {})).toBe(false)
   })
 
   it('creates ids without crypto.randomUUID', () => {

@@ -1,6 +1,54 @@
 import { describe, expect, it } from 'vitest'
 import { MAX_NOTE_MARKS } from '../src/utils/noteLimits'
-import { buildSegments, marksEqual, normalizeMarks } from '../src/utils/noteMarks'
+import { alignHeadingLines, buildSegments, marksEqual, normalizeMarks } from '../src/utils/noteMarks'
+
+describe('link marks', () => {
+  const A = 'https://a.example/page'
+  const B = 'https://b.example/'
+
+  it('keeps only safe http(s) links and strips credentials', () => {
+    expect(
+      normalizeMarks(
+        [
+          { type: 'link', start: 0, end: 2 },
+          { type: 'link', start: 0, end: 2, href: 'javascript' + ':alert(1)' },
+          { type: 'link', start: 0, end: 2, href: 'data:text/html,hi' },
+          { type: 'link', start: 3, end: 5, href: 'https://user:pass@a.example/page' },
+        ],
+        10
+      )
+    ).toEqual([{ type: 'link', start: 3, end: 5, href: A }])
+  })
+
+  it('merges touching links to the same URL but not to different URLs', () => {
+    expect(
+      normalizeMarks(
+        [
+          { type: 'link', start: 0, end: 3, href: A },
+          { type: 'link', start: 3, end: 5, href: A },
+          { type: 'link', start: 4, end: 8, href: B },
+        ],
+        10
+      )
+    ).toEqual([
+      { type: 'link', start: 0, end: 5, href: A },
+      { type: 'link', start: 5, end: 8, href: B },
+    ])
+  })
+
+  it('compares hrefs and carries them into segments', () => {
+    const a = [{ type: 'link' as const, start: 0, end: 2, href: A }]
+    const b = [{ type: 'link' as const, start: 0, end: 2, href: B }]
+    expect(marksEqual(a, b)).toBe(false)
+    expect(
+      buildSegments('abc', [{ type: 'bold', start: 0, end: 1 }, ...a])
+    ).toEqual([
+      { text: 'a', types: ['bold'], href: A },
+      { text: 'b', types: [], href: A },
+      { text: 'c', types: [] },
+    ])
+  })
+})
 
 describe('normalizeMarks', () => {
   it('rejects non-array input', () => {
@@ -98,5 +146,61 @@ describe('buildSegments', () => {
       { text: 'rl', types: [] },
       { text: 'd!', types: ['underline'] },
     ])
+  })
+})
+
+describe('heading marks', () => {
+  it('are kept, merged, and ordered after the text formats', () => {
+    expect(
+      normalizeMarks(
+        [
+          { type: 'heading', start: 4, end: 9 },
+          { type: 'heading', start: 0, end: 3 },
+          { type: 'heading', start: 2, end: 3 },
+          { type: 'link', start: 0, end: 2, href: 'https://a.example/' },
+          { type: 'bold', start: 1, end: 2 },
+        ],
+        10
+      )
+    ).toEqual([
+      { type: 'bold', start: 1, end: 2 },
+      { type: 'heading', start: 0, end: 3 },
+      { type: 'heading', start: 4, end: 9 },
+      { type: 'link', start: 0, end: 2, href: 'https://a.example/' },
+    ])
+  })
+
+  it('flag the segments they cover', () => {
+    expect(
+      buildSegments('Hi\nyou', [
+        { type: 'bold', start: 1, end: 2 },
+        { type: 'heading', start: 0, end: 2 },
+      ])
+    ).toEqual([
+      { text: 'H', types: [], heading: true },
+      { text: 'i', types: ['bold'], heading: true },
+      { text: '\nyou', types: [] },
+    ])
+  })
+
+  it('are widened to whole lines and split at line breaks', () => {
+    const content = 'one\ntwo\n\nthree'
+    expect(
+      alignHeadingLines(content, [
+        { type: 'bold', start: 0, end: 1 },
+        { type: 'heading', start: 1, end: 2 },
+        { type: 'heading', start: 2, end: 6 },
+        { type: 'heading', start: 8, end: 10 },
+      ])
+    ).toEqual([
+      { type: 'bold', start: 0, end: 1 },
+      { type: 'heading', start: 0, end: 3 },
+      { type: 'heading', start: 4, end: 7 },
+      { type: 'heading', start: 9, end: 14 },
+    ])
+  })
+
+  it('cover no line when they only span a line break', () => {
+    expect(alignHeadingLines('a\n\nb', [{ type: 'heading', start: 2, end: 3 }])).toEqual([])
   })
 })

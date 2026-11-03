@@ -25,6 +25,7 @@ import {
 } from '../utils/noteLimits'
 import {
   createBlankNote,
+  setNotePinned,
   sortNotes,
   updateNoteContent,
   updateNoteTitle,
@@ -157,6 +158,7 @@ export interface UseNotesResult {
   selectNote: (id: string) => void
   updateContent: (id: string, content: string, marks?: NoteMark[]) => void
   updateTitle: (id: string, title: string) => void
+  setPinned: (id: string, pinned: boolean) => void
   setTheme: (theme: ThemeMode) => void
   setMinimized: (minimized: boolean) => void
   setPanelPosition: (position: PanelPosition) => void
@@ -343,6 +345,13 @@ export function useNotes(): UseNotesResult {
   const updateTitle = useCallback(
     (id: string, title: string) => {
       mutateNote(id, (note) => updateNoteTitle(note, title))
+    },
+    [mutateNote]
+  )
+
+  const setPinned = useCallback(
+    (id: string, pinned: boolean) => {
+      mutateNote(id, (note) => setNotePinned(note, pinned))
     },
     [mutateNote]
   )
@@ -572,6 +581,7 @@ export function useNotes(): UseNotesResult {
     selectNote,
     updateContent,
     updateTitle,
+    setPinned,
     setTheme,
     setMinimized,
     setPanelPosition,

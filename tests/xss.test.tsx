@@ -53,10 +53,13 @@ describe('untrusted note rendering', () => {
         notes={[makeNote(payload)]}
         totalCount={1}
         query=""
+        filter="all"
         selectedId="xss-note"
         confirmDeleteId={null}
         onQueryChange={() => undefined}
+        onFilterChange={() => undefined}
         onSelect={() => undefined}
+        onTogglePin={() => undefined}
         onRequestDelete={() => undefined}
         onCancelDelete={() => undefined}
         onConfirmDelete={() => undefined}

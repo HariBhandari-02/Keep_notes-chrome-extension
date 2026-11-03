@@ -22,7 +22,7 @@
 
 /* Frosted glass: translucent fill, backdrop blur, a bright top edge, and a layered soft shadow. */
 .keep-notes-glass {
-  background-color: rgba(255, 255, 255, 0.78);
+  background-color: rgba(255, 255, 255, 0.95);
   border-color: rgba(255, 255, 255, 0.6);
   -webkit-backdrop-filter: blur(22px) saturate(170%);
   backdrop-filter: blur(22px) saturate(170%);
@@ -35,7 +35,7 @@
 }
 
 .dark .keep-notes-glass {
-  background-color: rgba(23, 23, 23, 0.74);
+  background-color: rgba(23, 23, 23, 0.94);
   border-color: rgba(255, 255, 255, 0.1);
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.35),
@@ -116,6 +116,32 @@
 .keep-notes-editor {
   overflow-wrap: anywhere;
   caret-color: #6366f1;
+}
+
+/* Text clipped from a page keeps its source link; the URL shows on hover. */
+.keep-notes-editor a[data-keep-notes-link] {
+  color: #4f46e5;
+  text-decoration: underline;
+  text-decoration-color: rgba(99, 102, 241, 0.35);
+  text-underline-offset: 3px;
+  cursor: text;
+}
+
+.dark .keep-notes-editor a[data-keep-notes-link] {
+  color: #a5b4fc;
+  text-decoration-color: rgba(165, 180, 252, 0.35);
+}
+
+/* A line started with "# ". Pressing Enter at its end continues in body text. */
+.keep-notes-editor h3 {
+  margin: 0;
+  font-size: inherit;
+  font-weight: 700;
+  color: #dc2626;
+}
+
+.dark .keep-notes-editor h3 {
+  color: #f87171;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -6,15 +6,22 @@ import {
   MAX_NOTE_CONTENT_LENGTH,
   MAX_NOTE_TITLE_LENGTH,
 } from '../utils/noteLimits'
+import { toLinkHref } from '../utils/linkUrl'
 import { formatRelativeTime } from '../utils/noteUtils'
 import { RichTextEditor, type RichTextEditorHandle } from './RichTextEditor'
 
 const NO_MARKS: NoteMark[] = []
 
+function currentPageUrl(): string {
+  return globalThis.location?.href ?? ''
+}
+
 interface NoteEditorProps {
   note: Note
   focusSignal: number
   getPageSelection: () => string
+  /** URL saved with text added from the page; defaults to the current page. */
+  getPageUrl?: () => string
   onChangeContent: (content: string, marks?: NoteMark[]) => void
   onChangeTitle: (title: string) => void
   onNotice: (message: string) => void
@@ -24,6 +31,7 @@ export function NoteEditor({
   note,
   focusSignal,
   getPageSelection,
+  getPageUrl = currentPageUrl,
   onChangeContent,
   onChangeTitle,
   onNotice,
@@ -85,8 +93,20 @@ export function NoteEditor({
     }
 
     const addition = selection.slice(0, available)
-    const nextContent = `${note.content}${separator}${addition}`
-    onChangeContent(nextContent)
+    const start = note.content.length + separator.length
+    const href = toLinkHref(getPageUrl())
+    if (href) {
+      // The trailing line break leaves the caret outside the link, so typing
+      // after the clip does not extend it.
+      const lineBreak = start + addition.length < MAX_NOTE_CONTENT_LENGTH ? '\n' : ''
+      const link: NoteMark = { type: 'link', start, end: start + addition.length, href }
+      onChangeContent(`${note.content}${separator}${addition}${lineBreak}`, [
+        ...(note.marks ?? NO_MARKS),
+        link,
+      ])
+    } else {
+      onChangeContent(`${note.content}${separator}${addition}`)
+    }
     onNotice(
       addition.length < selection.length
         ? 'Selected text was shortened to fit the note limit'
@@ -120,7 +140,7 @@ export function NoteEditor({
             type="button"
             onMouseDown={(event) => event.preventDefault()}
             onClick={handleAddSelection}
-            title="Add the current page text selection to this note"
+            title="Add the current page text selection to this note, with a link back to this page"
             className="inline-flex shrink-0 items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-600 outline-none transition-colors hover:border-indigo-300 hover:bg-indigo-100 hover:text-indigo-700 active:bg-indigo-200 focus-visible:ring-2 focus-visible:ring-indigo-500/70 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:border-indigo-400/50 dark:hover:bg-indigo-500/20 dark:hover:text-indigo-200"
           >
             <ClipboardPlus size={12.5} strokeWidth={2.2} aria-hidden="true" />
