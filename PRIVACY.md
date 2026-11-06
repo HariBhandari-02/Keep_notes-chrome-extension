@@ -66,6 +66,17 @@ any similar information.
 Keep Notes does not use cookies, tracking pixels, web beacons, server logs,
 or any other tracking technology.
 
+### Welcome and Uninstall Pages
+
+When you install Keep Notes, it opens a welcome page in a new tab. When you
+uninstall it, Chrome opens a feedback page. Both are static pages on our
+website (GitHub Pages); the extension itself sends nothing to them, and the
+only thing in the uninstall address is the extension's version number. The
+feedback form is optional and is provided by a third-party form service
+(Google Forms or Tally). If you choose to submit it, that service receives
+what you type, under its own privacy policy. Hosting providers may log page
+requests as part of normal operation.
+
 ### Information from Third Parties
 
 We do not receive information about you from third parties. Keep Notes is
