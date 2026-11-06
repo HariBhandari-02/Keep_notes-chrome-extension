@@ -20,6 +20,7 @@
   "include": [
     "src",
     "tests",
+    "website/tests",
     "vite.config.ts",
     "vite.content.config.ts",
     "vitest.config.ts",

@@ -16,8 +16,7 @@ function FeedbackForm() {
             href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Keep Notes feedback')}`}
           >
             {SUPPORT_EMAIL}
-          </a>
-          .
+          </a>.
         </p>
       </div>
     )
@@ -38,8 +37,7 @@ function FeedbackForm() {
         Form not loading?{' '}
         <a href={FEEDBACK_FORM_URL} rel="noopener noreferrer" target="_blank">
           Open it in a new tab
-        </a>
-        .
+        </a>.
       </p>
     </div>
   )

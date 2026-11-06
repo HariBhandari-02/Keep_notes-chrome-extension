@@ -1,13 +1,13 @@
 import type { ReactNode } from 'react'
 import { page, REPO_URL, SUPPORT_EMAIL } from '../config'
 
-export function Layout({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
+export function Layout({ children, wide = false }: Readonly<{ children: ReactNode; wide?: boolean }>) {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="mx-auto flex w-full max-w-4xl items-center justify-between px-4 py-5">
         <a href={page('')} className="flex items-center gap-2 font-bold no-underline">
           <img src={`${import.meta.env.BASE_URL}icons/icon48.png`} alt="" width={32} height={32} className="rounded-lg" />
-          Keep Notes
+          <span>Keep Notes</span>
         </a>
         <nav className="flex gap-5 text-sm">
           <a href={page('privacy.html')}>Privacy</a>
