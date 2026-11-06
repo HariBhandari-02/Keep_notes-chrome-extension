@@ -16,6 +16,9 @@
     "sonar": "npm run test:coverage && bash scripts/sonar.sh",
     "sonar:fetch": "node --experimental-strip-types scripts/sonar-fetch.ts",
     "verify": "node scripts/verify-dist.mjs",
+    "zip": "npm run build && cd dist && zip -r \"../keep-notes-$npm_package_version.zip\" .",
+    "site:dev": "npm --prefix website run dev",
+    "site:build": "npm --prefix website ci && npm --prefix website run build",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "dependencies": {

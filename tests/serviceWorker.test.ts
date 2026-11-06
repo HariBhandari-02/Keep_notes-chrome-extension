@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 type ActionListener = (tab: chrome.tabs.Tab) => void
 type CommandListener = (command: string, tab?: chrome.tabs.Tab) => void
+type InstalledListener = (details: { reason: string }) => void
 
 interface Harness {
   click: (tab: Partial<chrome.tabs.Tab>) => void
@@ -9,6 +10,9 @@ interface Harness {
   sendMessage: ReturnType<typeof vi.fn>
   executeScript: ReturnType<typeof vi.fn>
   query: ReturnType<typeof vi.fn>
+  install: (reason: string) => void
+  createTab: ReturnType<typeof vi.fn>
+  setUninstallURL: ReturnType<typeof vi.fn>
   action: {
     setBadgeBackgroundColor: ReturnType<typeof vi.fn>
     setBadgeText: ReturnType<typeof vi.fn>
@@ -19,7 +23,19 @@ interface Harness {
 async function loadServiceWorker(): Promise<Harness> {
   let click: ActionListener = () => undefined
   let command: CommandListener = () => undefined
+  let installed: InstalledListener = () => undefined
 
+  const createTab = vi.fn(async () => undefined)
+  const setUninstallURL = vi.fn(async () => undefined)
+  const runtime = {
+    onInstalled: {
+      addListener: vi.fn((listener: InstalledListener) => {
+        installed = listener
+      }),
+    },
+    setUninstallURL,
+    getManifest: vi.fn(() => ({ version: '1.2.3' })),
+  }
   const sendMessage = vi.fn()
   const executeScript = vi.fn()
   const query = vi.fn()
@@ -44,7 +60,8 @@ async function loadServiceWorker(): Promise<Harness> {
   vi.stubGlobal('chrome', {
     action,
     commands,
-    tabs: { sendMessage, query },
+    runtime,
+    tabs: { sendMessage, query, create: createTab },
     scripting: { executeScript },
   })
 
@@ -56,6 +73,9 @@ async function loadServiceWorker(): Promise<Harness> {
     sendMessage,
     executeScript,
     query,
+    install: (reason) => installed({ reason }),
+    createTab,
+    setUninstallURL,
     action,
   }
 }
@@ -64,6 +84,46 @@ describe('service worker', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.resetModules()
+  })
+
+  it('opens the welcome page and sets the uninstall page on install', async () => {
+    const harness = await loadServiceWorker()
+
+    harness.install('install')
+
+    expect(harness.createTab).toHaveBeenCalledWith({
+      url: 'https://haribhandari-02.github.io/Keep_notes-chrome-extension/welcome.html',
+    })
+    expect(harness.setUninstallURL).toHaveBeenCalledWith(
+      'https://haribhandari-02.github.io/Keep_notes-chrome-extension/uninstall.html?v=1.2.3'
+    )
+  })
+
+  it('refreshes the uninstall page on update without opening a tab', async () => {
+    const harness = await loadServiceWorker()
+
+    harness.install('update')
+
+    expect(harness.createTab).not.toHaveBeenCalled()
+    expect(harness.setUninstallURL).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores other install reasons', async () => {
+    const harness = await loadServiceWorker()
+
+    harness.install('chrome_update')
+
+    expect(harness.createTab).not.toHaveBeenCalled()
+    expect(harness.setUninstallURL).not.toHaveBeenCalled()
+  })
+
+  it('survives failures when opening the welcome page or setting the uninstall page', async () => {
+    const harness = await loadServiceWorker()
+    harness.createTab.mockRejectedValueOnce(new Error('no window'))
+    harness.setUninstallURL.mockRejectedValueOnce(new Error('rejected'))
+
+    expect(() => harness.install('install')).not.toThrow()
+    await Promise.resolve()
   })
 
   it('opens the panel when the content script is already injected', async () => {

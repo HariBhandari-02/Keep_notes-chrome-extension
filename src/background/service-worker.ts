@@ -1,4 +1,5 @@
 import type { PanelMessage } from '../content/panelMessages'
+import { uninstallUrl, WELCOME_URL } from './siteUrls'
 
 const CONTENT_SCRIPT = 'content.js'
 const DEFAULT_TITLE = 'Open Keep Notes'
@@ -118,6 +119,23 @@ async function togglePanel(tab: chrome.tabs.Tab | undefined): Promise<void> {
   await clearUnsupportedFeedback(tabId)
   await sendMessage(tabId, { type: 'OPEN_PANEL' })
 }
+
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason !== 'install' && details.reason !== 'update') return
+
+  // Chrome opens this page after the extension is removed. Only the app version is included.
+  try {
+    void Promise.resolve(chrome.runtime.setUninstallURL(uninstallUrl(chrome.runtime.getManifest().version))).catch(
+      () => undefined
+    )
+  } catch {
+    // Best-effort: the feedback page is optional.
+  }
+
+  if (details.reason === 'install') {
+    void Promise.resolve(chrome.tabs.create({ url: WELCOME_URL })).catch(() => undefined)
+  }
+})
 
 chrome.action.onClicked.addListener((tab) => {
   void openPanel(tab)
