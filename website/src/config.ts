@@ -1,7 +1,6 @@
 const clean = (value: string | undefined): string => (value ?? '').trim()
 
 export const BASE_URL = import.meta.env.BASE_URL
-export const REPO_URL = 'https://github.com/HariBhandari-02/Keep_notes-chrome-extension'
 export const SUPPORT_EMAIL = 'keepnotes.support@gmail.com'
 
 /** Chrome Web Store listing. Empty until the extension is published. */

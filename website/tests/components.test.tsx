@@ -26,10 +26,8 @@ describe('GetExtensionButton', () => {
     expect(html).toContain('>Reinstall Keep Notes<')
   })
 
-  it('falls back to the GitHub repository before the extension is published', async () => {
-    const html = await button({ VITE_STORE_URL: '' })
-    expect(html).toContain('href="https://github.com/HariBhandari-02/Keep_notes-chrome-extension"')
-    expect(html).toContain('>View on GitHub<')
+  it('renders nothing before the extension is published', async () => {
+    expect(await button({ VITE_STORE_URL: '' })).toBe('')
   })
 })
 
@@ -47,7 +45,7 @@ describe('Layout', () => {
     const html = await layout()
     expect(html).toContain('<span>Keep Notes</span>')
     expect(html).toContain('href="/privacy.html"')
-    expect(html).toContain('github.com/HariBhandari-02/Keep_notes-chrome-extension')
+    expect(html).not.toContain('github.com')
     expect(html).toContain('child content')
     expect(html).toContain('mailto:keepnotes.support@gmail.com')
   })

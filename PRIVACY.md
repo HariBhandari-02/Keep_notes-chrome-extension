@@ -1,6 +1,6 @@
 # Keep Notes Privacy Policy
 
-Last Updated: October 28, 2026
+Last Updated: November 12, 2026
 
 This Privacy Policy ("Policy") explains how the Keep Notes Chrome extension
 ("Keep Notes," "the extension," "we," "us," and "our") handles your
@@ -26,8 +26,12 @@ Keep Notes is designed around the following principles:
 ## Information We Collect
 
 We do not collect, receive, or have access to any of your personal
-information. Nothing you do in Keep Notes is transmitted to us or to any
-third party.
+information through the extension. Nothing you do in Keep Notes is
+transmitted to us or to any third party. The optional feedback form on the
+uninstall page is separate from the extension. If you choose to submit it,
+the form provider processes your response and we may receive the response
+you send, as described in [Welcome and Uninstall Pages](#welcome-and-uninstall-pages)
+below.
 
 ### Information Stored on Your Device
 
@@ -57,9 +61,10 @@ history or any other page content.
 
 ### Information that Is Automatically Collected
 
-None. Keep Notes does not collect device information, IP addresses, location,
-browser or operating system details, usage statistics, clicks, error logs, or
-any similar information.
+None by the extension. Keep Notes does not collect device information, IP
+addresses, location, browser or operating system details, usage statistics,
+clicks, error logs, or any similar information. An embedded feedback form may
+cause the form provider to receive technical information as described below.
 
 ### Cookies and Other Tracking Technologies
 
@@ -71,11 +76,22 @@ or any other tracking technology.
 When you install Keep Notes, it opens a welcome page in a new tab. When you
 uninstall it, Chrome opens a feedback page. Both are static pages on our
 website (GitHub Pages); the extension itself sends nothing to them, and the
-only thing in the uninstall address is the extension's version number. The
-feedback form is optional and is provided by a third-party form service
-(Google Forms or Tally). If you choose to submit it, that service receives
-what you type, under its own privacy policy. Hosting providers may log page
-requests as part of normal operation.
+only thing in the uninstall address is the extension's version number.
+Hosting providers may log page requests as part of normal operation.
+
+The feedback form on the uninstall page is optional. It is provided by a
+third-party form service (Google Forms or Tally) and is loaded directly from
+that service in an embedded frame. When the form loads, the provider may
+receive technical information such as your IP address, browser type, and
+device information, even if you do not submit a response. Depending on how
+the form is configured, it may also collect your email address or require
+you to sign in with a Google account.
+
+If you submit the form, the provider stores your response and we can view it.
+We use feedback only to understand what went wrong and improve Keep Notes. Do
+not include notes or sensitive personal information in your response. The
+provider handles information under its own privacy policy, including
+[Google's Privacy Policy](https://policies.google.com/privacy).
 
 ### Information from Third Parties
 
@@ -98,10 +114,11 @@ other purpose.
 
 ## When We Disclose Your Information
 
-We do not sell, rent, trade, or share your information with anyone. Because
-your notes never leave your device and we do not have access to them, we have
-nothing to disclose to service providers, advertisers, affiliates, business
-partners, or authorities.
+We do not sell, rent, trade, or share your notes with anyone. Because your
+notes never leave your device and we do not have access to them, we have
+nothing to disclose to advertisers, affiliates, business partners, or
+authorities. If you submit optional feedback, the form provider processes it
+as described above, and we may use the response only to improve Keep Notes.
 
 Keep Notes's use of information complies with the
 [Chrome Web Store User Data Policy](https://developer.chrome.com/docs/webstore/program-policies/user-data-faq),
@@ -111,9 +128,11 @@ including the Limited Use requirements.
 
 Some jurisdictions, such as the European Union under the GDPR, require
 companies to state the legal basis for processing personal data. We do not
-collect or process your personal data. The only processing of your notes
-happens on your own device, under your control, to provide the features you
-choose to use.
+collect or process your personal data through the extension. The only
+processing of your notes happens on your own device, under your control, to
+provide the features you choose to use. If you submit optional feedback, we
+process the response based on your consent, which you can withdraw by
+contacting us using the details below.
 
 ## Online Analytics
 
@@ -135,16 +154,19 @@ There are no accounts to manage and no marketing emails to unsubscribe from.
 
 Individuals in the European Economic Area ("EEA") and other jurisdictions have
 legal rights to access, correct, delete, restrict, or object to the
-processing of their personal data. Because we hold no personal data about
-you, there is nothing for us to access, correct, or delete; you can exercise
-these rights directly in the extension as described above. If you have
-questions, please contact us using the details below. You also have the right
-to contact your local data protection authority.
+processing of their personal data. The extension holds no personal data about
+you, so there is nothing for us to access, correct, or delete in the
+extension. If you submitted optional feedback, you can ask us to access or
+delete your response by contacting us using the details below; we may need
+enough detail to identify the response. You also have the right to contact
+your local data protection authority.
 
 ## International Transfers
 
-None. Your data stays on your device and is not transferred to any server or
-country.
+None for your notes. Your notes stay on your device and are not transferred to
+any server or country. If you submit optional feedback, the form provider may
+process and store it in other countries under its own terms and privacy
+policy.
 
 ## Security Measures
 
@@ -174,15 +196,18 @@ Keep Notes requests the following Chrome permissions:
 
 ## Children
 
-Keep Notes is a general-purpose tool and does not collect personal
-information from anyone, including children under the age of 13 (as defined
-by the Children's Online Privacy Protection Act) or under the age of 16 (as
-defined by the EU GDPR).
+The Keep Notes extension does not collect personal information from anyone,
+including children under the age of 13 (as defined by the Children's Online
+Privacy Protection Act) or under the age of 16 (as defined by the EU GDPR).
+The feedback form is not directed to children. If a child submits feedback, a
+parent or guardian can contact us to request deletion.
 
 ## Data Retention
 
 Your notes and preferences stay on your device until you delete them or
-uninstall the extension. We do not keep any copies or backups.
+uninstall the extension. We do not keep any copies or backups of your notes.
+Feedback responses are stored by the form provider and remain available to us
+until we no longer need them or you ask us to delete them.
 
 ## Third-Party Links and Services
 

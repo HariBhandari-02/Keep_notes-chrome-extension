@@ -46,11 +46,13 @@ describe('welcome page', () => {
 })
 
 describe('home page', () => {
-  it('describes the extension and links to the repository without a store URL', async () => {
+  it('describes the extension and hides the install button without a store URL', async () => {
     const html = await renderPage('../src/index', { VITE_STORE_URL: '' })
     expect(html).toContain('A floating notepad for Chrome')
     expect(html).toContain('Local-first')
-    expect(html).toContain('View on GitHub')
+    expect(html).not.toContain('View on GitHub')
+    expect(html).not.toContain('github.com')
+    expect(html).not.toContain('Add to Chrome')
   })
 
   it('offers the Web Store install button once published', async () => {
@@ -74,14 +76,20 @@ describe('uninstall page', () => {
     expect(html).toContain(`href="${STORE}"`)
   })
 
-  it('points the reinstall button at GitHub before publication', async () => {
+  it('hides the reinstall section before publication', async () => {
     const html = await renderPage('../src/uninstall', { VITE_STORE_URL: '' })
-    expect(html).toContain('View on GitHub')
+    expect(html).not.toContain('View on GitHub')
+    expect(html).not.toContain('github.com')
+    expect(html).not.toContain('Uninstalled by accident?')
   })
 
   it('embeds the feedback form when one is configured', async () => {
     const html = await renderPage('../src/uninstall', { VITE_FEEDBACK_FORM_URL: FORM })
+    expect(html).toContain('Help us improve')
+    expect(html).toContain('What made you decide to uninstall Keep Notes?')
     expect(html).toContain('<iframe')
+    expect(html).toContain('width="640"')
+    expect(html).toContain('height="600"')
     expect(html).toContain('embedded=true')
     expect(html).toContain('referrerPolicy="no-referrer"')
     expect(html).toContain('Open it in a new tab')

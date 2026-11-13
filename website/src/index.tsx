@@ -1,5 +1,6 @@
 import { GetExtensionButton } from './components/Buttons'
 import { Layout } from './components/Layout'
+import { STORE_URL } from './config'
 import { mount } from './mount'
 
 const FEATURES = [
@@ -17,9 +18,11 @@ function Home() {
         <p className="mx-auto mt-4 max-w-xl text-lg opacity-80">
           Capture notes while you read without leaving the page. Fast, private and always one shortcut away.
         </p>
-        <div className="mt-8 flex justify-center gap-3">
-          <GetExtensionButton />
-        </div>
+        {STORE_URL ? (
+          <div className="mt-8 flex justify-center gap-3">
+            <GetExtensionButton />
+          </div>
+        ) : null}
         <p className="mt-3 text-sm opacity-70">
           Shortcut: <span className="kbd">Alt</span> + <span className="kbd">Shift</span> + <span className="kbd">K</span>
         </p>
