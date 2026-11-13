@@ -18,9 +18,6 @@ function FeedbackForm() {
             src={src}
             width={640}
             height={600}
-            frameBorder={0}
-            marginHeight={0}
-            marginWidth={0}
             className="mx-auto block h-[600px] w-full max-w-[640px] rounded-2xl border border-note-200 bg-white dark:border-zinc-800"
             loading="lazy"
             referrerPolicy="no-referrer"

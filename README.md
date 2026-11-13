@@ -181,6 +181,24 @@ Chrome provides `chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CON
 - `npm test` includes static source scans for dangerous DOM/code-execution APIs and XSS/message-protocol regression tests.
 - SonarQube is optional and requires a local server plus `SONAR_TOKEN`; see `scripts/sonar.sh` and `sonar-project.properties`. No ESLint or Semgrep toolchain is installed by default to avoid unnecessary dependencies; the project's static checks are implemented as Vitest tests and the post-build verifier.
 
+### Coverage and SonarQube gate
+
+`npm run test:coverage` enforces a minimum of **80%** for statements, branches, functions, and lines, so coverage cannot silently fall below the threshold.
+
+`npm run sonar` generates the coverage report, runs the scanner, waits for the SonarQube quality gate, and then verifies the live results:
+
+- overall coverage is at least 80% (`sonar.qualitygate.wait=true` also enforces the server-side gate);
+- there are zero open issues at `INFO` severity or above;
+- the server-side quality gate is `OK`.
+
+On a fresh SonarQube instance, run the one-time gate setup with a **user token** that has quality-gate administration permission (the project analysis token used for scanning is not sufficient):
+
+```bash
+SONAR_ADMIN_TOKEN=<user-token> npm run sonar:gate
+```
+
+This creates or updates the `Keep Notes Quality Gate` with overall/new-code coverage and zero-issue conditions, then assigns it to the project. Use `npm run sonar:fetch -- --fail-on HIGH` if you intentionally want to allow Medium/Low issues while reviewing them.
+
 ## Tests
 
 ```bash

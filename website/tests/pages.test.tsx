@@ -92,6 +92,9 @@ describe('uninstall page', () => {
     expect(html).toContain('height="600"')
     expect(html).toContain('embedded=true')
     expect(html).toContain('referrerPolicy="no-referrer"')
+    expect(html).not.toContain('frameBorder')
+    expect(html).not.toContain('marginHeight')
+    expect(html).not.toContain('marginWidth')
     expect(html).toContain('Open it in a new tab')
   })
 
