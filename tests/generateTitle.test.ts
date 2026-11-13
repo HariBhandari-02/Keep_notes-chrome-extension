@@ -36,7 +36,7 @@ describe('truncateText', () => {
     const value = '😀'.repeat(60)
     const result = truncateText(value, 10)
     expect(Array.from(result)).toHaveLength(10)
-    expect(result).not.toContain('�')
+    expect(result).not.toContain('\uFFFD')
   })
 
   it('returns only an ellipsis for tiny limits', () => {
