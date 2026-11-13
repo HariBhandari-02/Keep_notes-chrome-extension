@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { page, REPO_URL, SUPPORT_EMAIL } from '../config'
+import { page, SUPPORT_EMAIL } from '../config'
 
 export function Layout({ children, wide = false }: Readonly<{ children: ReactNode; wide?: boolean }>) {
   return (
@@ -11,9 +11,6 @@ export function Layout({ children, wide = false }: Readonly<{ children: ReactNod
         </a>
         <nav className="flex gap-5 text-sm">
           <a href={page('privacy.html')}>Privacy</a>
-          <a href={REPO_URL} rel="noopener noreferrer">
-            GitHub
-          </a>
         </nav>
       </header>
       <main className={`mx-auto w-full flex-1 px-4 pb-16 ${wide ? 'max-w-4xl' : 'max-w-2xl'}`}>{children}</main>

@@ -1,11 +1,12 @@
-import { REPO_URL, STORE_URL } from '../config'
+import { STORE_URL } from '../config'
 
-/** Install/reinstall link: Web Store when published, GitHub otherwise. */
+/** Install/reinstall link: shown only once the extension is published. */
 export function GetExtensionButton({ label = 'Add to Chrome' }: Readonly<{ label?: string }>) {
-  const href = STORE_URL || REPO_URL
+  if (!STORE_URL) return null
+
   return (
-    <a className="btn btn-primary" href={href} rel="noopener noreferrer">
-      {STORE_URL ? label : 'View on GitHub'}
+    <a className="btn btn-primary" href={STORE_URL} rel="noopener noreferrer">
+      {label}
     </a>
   )
 }
